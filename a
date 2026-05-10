@@ -24,3 +24,412 @@
 포인핸드 : https://pawinhand.kr/shelter/animal 이며, 상세페이지는 https://pawinhand.kr/shelter/animal/detail/공고번호 이다
 
 이 기획 문서대로 프로그램을 작성하고, next 패키지는 가능하면 가장 최신 버전을 사용해서 프로젝트를 구성해
+
+
+국가동물보호정보시스템(AWTIS) 크롤링 추가 요구사항
+목표
+현재 서비스 검색 결과에 국가동물보호정보시스템(AWTIS) 보호동물 데이터를 추가 연동
+기존 포인핸드 데이터와 중복되는 경우 상세페이지에서 “포인핸드 / 국가동물보호정보시스템 둘 다 연결 가능” 표시
+현재 서비스의 검색 조건과 동일하게 연동
+연동 대상 사이트
+국가동물보호정보시스템
+메인: https://www.animal.go.kr
+보호동물 목록:
+https://www.animal.go.kr/front/awtis/public/publicList.do
+보호동물 상세:
+https://www.animal.go.kr/front/awtis/public/publicDtl.do
+크롤링 방식
+서버 사이드 크롤링
+
+
+HTML 파싱 방식
+
+
+상세페이지까지 수집
+
+
+이미지 URL 포함 수집
+
+
+주기적 수집 또는 검색 시 실시간 수집 가능하도록 설계
+
+
+현재 서비스 검색 조건과 매핑해야 하는 값
+
+
+시작일 / 종료일
+AWTIS 파라미터
+
+
+
+
+searchSDate
+
+
+searchEDate
+
+
+예시
+searchSDate=2026-04-10
+searchEDate=2026-05-10
+기본값
+
+
+최근 3개월
+
+
+
+
+발견 지역(한 줄 입력)
+현재 서비스 입력 예시
+
+
+
+
+서울 강남
+
+
+경기 수원
+
+
+경남 거창
+
+
+매핑 방식
+
+
+AWTIS의 지역 코드 검색 또는 문자열 포함 검색
+
+
+가능하면 시/도 + 시군구 코드화
+
+
+사용 파라미터
+
+
+searchUprCd (시도)
+
+
+searchOrgCd (시군구)
+
+
+예시
+경남 거창
+searchUprCd=6480000
+searchOrgCd=5470000
+
+
+품종
+사용 파라미터
+
+
+
+
+searchUpKindCd
+
+
+예시
+개
+417000
+고양이
+422400
+
+
+세부 품종
+사용 파라미터
+
+
+
+
+searchKindCd
+
+
+예시
+한국 고양이
+000054
+푸들
+000128
+
+
+성별
+사용 파라미터
+
+
+
+
+성별은 상세페이지 파싱 필요
+
+
+목록 API에 없으면 상세페이지에서 추출
+
+
+값 예시
+
+
+수컷
+
+
+암컷
+
+
+미상
+
+
+
+
+중성화 여부
+상세페이지 파싱
+
+
+값 예시
+
+
+예
+
+
+아니오
+
+
+미상
+
+
+수집해야 하는 데이터 필드
+목록 페이지에서 수집
+
+
+공고번호
+
+
+썸네일 이미지
+
+
+보호상태
+
+
+품종
+
+
+발견지역
+
+
+공고기간
+
+
+보호센터명
+
+
+상세페이지 URL
+
+
+상세페이지에서 추가 수집
+
+
+동물종류
+
+
+품종
+
+
+털색
+
+
+성별
+
+
+중성화 여부
+
+
+특징
+
+
+구조일
+
+
+구조장소
+
+
+공고기간
+
+
+보호센터명
+
+
+보호센터 주소
+
+
+보호센터 전화번호
+
+
+상세 이미지들
+
+
+공고번호
+
+
+상세페이지 URL 생성 방식
+POST 방식 이동이라 실제 접근 시 아래 형태 사용
+https://www.animal.go.kr/front/awtis/public/publicDtl.do
+전송 값 예시
+
+
+noticeNo
+
+
+desertionNo
+
+
+menuNo=1000000055
+
+
+또는 목록에서 form submit 값 추출 필요
+이미지 URL
+예시
+https://www.animal.go.kr/front/fileMng/imageView.do?f=/files/shelter/2026/05/202605101205941.jpg
+중복 판별 로직 (포인핸드 ↔ 국가동물보호정보시스템)
+중복 기준 추천
+우선순위 순서
+1순위
+
+
+공고번호 동일
+
+
+2순위
+
+
+보호소명 동일
+
+
+품종 동일
+
+
+발견 날짜 ±1일
+
+
+지역 동일
+
+
+3순위
+
+
+대표 이미지 유사도 비교
+
+
+중복 시 처리 방식
+상세페이지 UI 예시
+“이 동물은 아래 플랫폼에서도 확인 가능”
+
+
+포인핸드 바로가기
+
+
+국가동물보호정보시스템 바로가기
+
+
+필요한 저장 필드 추가
+animal_sources 테이블 예시
+
+
+animal_id
+
+
+source_type
+
+
+pointhand
+
+
+awtis
+
+
+
+
+source_url
+
+
+source_notice_no
+
+
+source_desertion_no
+
+
+추천 응답 구조 예시
+{
+"source": "awtis",
+"noticeNo": "경남-거창-2026-00121",
+"species": "고양이",
+"breed": "한국 고양이",
+"color": "레몬색 & 흰색",
+"gender": "미상",
+"neutered": false,
+"foundPlace": "거창군 거창읍 양평1길 7",
+"rescueDate": "2026-05-10",
+"shelterName": "거창군 동물보호소",
+"shelterPhone": "010-2617-6245",
+"detailUrl": "https://www.animal.go.kr/front/awtis/public/publicDtl.do?...",
+"images": [
+"https://www.animal.go.kr/front/fileMng/imageView.do?f=..."
+]
+}
+주의사항
+
+
+국가동물보호정보시스템은 구조가 자주 바뀔 수 있으므로 selector 기반 크롤링 분리 필요
+
+
+robots.txt 및 과도한 요청 제한 고려
+
+
+rate limit 적용 필요
+
+
+이미지 hotlink 문제 발생 가능 → 자체 저장 권장
+
+
+일부 페이지는 form 기반 이동이라 hidden input 값 추출 필요
+
+
+메뉴번호(menuNo)는 페이지 접근 유지에 필요할 수 있음
+
+
+프론트 UI 요구사항
+검색 필터
+
+
+기존 검색 필터 그대로 유지
+
+
+데이터 출처 필터 추가 가능
+
+
+전체
+
+
+포인핸드
+
+
+국가동물보호정보시스템
+
+
+
+
+상세페이지
+
+
+“출처” 표시
+
+
+중복 플랫폼 연결 버튼 표시
+
+
+원본 사이트 이동 버튼 제공
+
+
+예시
+
+
+포인핸드에서 보기
+
+
+국가동물보호정보시스템에서 보기
+

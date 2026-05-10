@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 
 import { breedsForCategory } from "@/data/breeds-by-category";
 import { formatKoreanDate, monthsAgo, toDateInputValue } from "@/lib/date";
+import { SOURCE_AWTIS, SOURCE_PAWINHAND, sourceSiteLabel } from "@/lib/source-constants";
 import {
   animalCategories,
   animalGenders,
@@ -23,6 +24,8 @@ type SearchState = {
   gender: string;
   neutered: string;
   keywords: string;
+  /** 비우면 전체; API 쿼리는 `source`로 전달 */
+  dataSource: "" | typeof SOURCE_PAWINHAND | typeof SOURCE_AWTIS;
 };
 
 type SavedAlertRow = {
@@ -85,9 +88,20 @@ function buildQuery(search: SearchState, page: number) {
   params.set("limit", String(limit));
   params.set("from", search.from);
   params.set("to", search.to);
+  if (search.dataSource) {
+    params.set("source", search.dataSource);
+  }
 
   Object.entries(search).forEach(([key, value]) => {
-    if (key !== "useDefaultPeriod" && value && key !== "from" && key !== "to") {
+    if (
+      key === "useDefaultPeriod" ||
+      key === "from" ||
+      key === "to" ||
+      key === "dataSource"
+    ) {
+      return;
+    }
+    if (value) {
       params.set(key, String(value));
     }
   });
@@ -227,7 +241,8 @@ export function SearchExperience() {
       breed: "",
       gender: "",
       neutered: "",
-      keywords: ""
+      keywords: "",
+      dataSource: "" as const
     }),
     []
   );
@@ -240,7 +255,7 @@ export function SearchExperience() {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
-  const [crawlLoading, setCrawlLoading] = useState(false);
+  const [crawlBusy, setCrawlBusy] = useState<null | "pawinhand" | "awtis">(null);
   const [crawlInfo, setCrawlInfo] = useState("");
   const [savedAlerts, setSavedAlerts] = useState<SavedAlertRow[]>([]);
   const [alertListTick, setAlertListTick] = useState(0);
@@ -512,7 +527,7 @@ export function SearchExperience() {
   }
 
   async function runPawinhandCrawl() {
-    setCrawlLoading(true);
+    setCrawlBusy("pawinhand");
     setCrawlInfo("");
     setMessage("");
     try {
@@ -560,7 +575,56 @@ export function SearchExperience() {
     } catch {
       setMessage("포인핸드 동기화 요청 중 오류가 발생했습니다.");
     } finally {
-      setCrawlLoading(false);
+      setCrawlBusy(null);
+    }
+  }
+
+  async function runAwtisCrawl() {
+    setCrawlBusy("awtis");
+    setCrawlInfo("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/crawl/awtis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          searchSDate: search.from,
+          searchEDate: search.to,
+          regionFilter: search.region || "",
+          category: search.category || "",
+          breed: search.breed || ""
+        })
+      });
+      const data = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        listPagesFetched?: number;
+        listRowsSeen?: number;
+        detailsFetched?: number;
+        merged?: number;
+        created?: number;
+        errors?: string[];
+        note?: string;
+      };
+
+      if (!response.ok || data.error) {
+        setCrawlInfo("");
+        setMessage(data.error ?? "국가동물보호정보시스템 동기화에 실패했습니다.");
+        return;
+      }
+
+      const errN = data.errors?.length ?? 0;
+      const firstErr = errN > 0 ? data.errors?.[0] : "";
+      const warn = errN > 0 ? ` (오류 ${errN}건${firstErr ? `: ${firstErr}` : ""})` : "";
+      const note = data.note ? ` · ${data.note}` : "";
+      setCrawlInfo(
+        `AWTIS: 목록 ${data.listPagesFetched ?? 0}페이지 · 행 ${data.listRowsSeen ?? 0} · 상세 ${data.detailsFetched ?? 0} · 신규 ${data.created ?? 0} · 병합 ${data.merged ?? 0}${warn}${note}`
+      );
+      await fetchAnimals(1);
+    } catch {
+      setMessage("국가동물보호정보시스템 동기화 요청 중 오류가 발생했습니다.");
+    } finally {
+      setCrawlBusy(null);
     }
   }
 
@@ -570,26 +634,34 @@ export function SearchExperience() {
         <p className="eyebrow">통합 보호 동물 탐색</p>
         <h1>잃어버린 반려동물과 닮은 공고를 한 번에 찾아보세요.</h1>
         <p>
-          검색은 <strong>로컬 DB</strong>만 조회합니다. 포인핸드 공고는 아래 버튼으로{" "}
-          <code>pawinhand.net</code> 브리지 JSON API를 호출해 DB에 반영하세요. 수집 범위는 환경 변수(
-          <code>PAWINHAND_BRIDGE_*</code>)로 바꿀 수 있으며, 앱에는 <strong>자동 주기 스케줄은 없습니다</strong>{" "}
-          (원하면 호스팅 Cron으로 같은 API를 주기 호출).
+          검색은 <strong>로컬 DB</strong>만 조회합니다. 포인핸드는 <code>pawinhand.net</code> 브리지 JSON으로, 국가동물보호정보시스템(
+          <code>animal.go.kr</code>)은 서버에서 HTML을 파싱해 DB에 반영합니다. 수집 범위는 환경 변수로 조정할 수 있고, 앱에는{" "}
+          <strong>자동 주기 스케줄은 없습니다</strong> (Cron 등으로 동일 API를 주기 호출하면 됩니다).
         </p>
       </section>
 
-      <section className="panel crawl-panel" aria-label="포인핸드 데이터 동기화">
+      <section className="panel crawl-panel" aria-label="외부 공고 동기화">
         <p>
-          브리지 동기화는 기본으로 <strong>17개 시·도</strong>와 축종 <strong>개·고양이·기타</strong>를 순회합니다. 환경 변수로
-          범위를 줄이거나 늘릴 수 있습니다.
+          <strong>포인핸드</strong> 브리지는 기본으로 17개 시·도와 축종 개·고양이·기타를 순회합니다.{" "}
+          <strong>국가동물보호정보시스템</strong>은 아래 검색 폼의 기간·지역·품종 조건을 그대로 넘겨 목록·상세를 수집합니다(사이트 구조 변경 시{" "}
+          <code>awtis-selectors.ts</code> 조정 필요).
         </p>
-        <div className="crawl-actions">
+        <div className="crawl-actions crawl-actions--split">
           <button
             className="crawl-button"
-            disabled={crawlLoading}
+            disabled={crawlBusy !== null}
             type="button"
             onClick={() => void runPawinhandCrawl()}
           >
-            {crawlLoading ? "가져오는 중…" : "포인핸드 브리지 동기화"}
+            {crawlBusy === "pawinhand" ? "가져오는 중…" : "포인핸드 브리지 동기화"}
+          </button>
+          <button
+            className="crawl-button crawl-button--secondary"
+            disabled={crawlBusy !== null}
+            type="button"
+            onClick={() => void runAwtisCrawl()}
+          >
+            {crawlBusy === "awtis" ? "가져오는 중…" : "국가동물보호시스템 동기화"}
           </button>
         </div>
       </section>
@@ -712,6 +784,22 @@ export function SearchExperience() {
             </label>
           </div>
 
+          <div className="search-form-row cols-1">
+            <label className="wide">
+              데이터 출처
+              <select
+                value={search.dataSource}
+                onChange={(event) =>
+                  updateSearch("dataSource", event.target.value as SearchState["dataSource"])
+                }
+              >
+                <option value="">전체</option>
+                <option value={SOURCE_PAWINHAND}>포인핸드</option>
+                <option value={SOURCE_AWTIS}>국가동물보호정보시스템</option>
+              </select>
+            </label>
+          </div>
+
           <button type="submit">{isLoading ? "검색 중" : "검색"}</button>
         </form>
       </section>
@@ -724,6 +812,7 @@ export function SearchExperience() {
             <div className="badges">
               <span>{animal.status}</span>
               <span>{animal.gender}</span>
+              <span className="badge-source">{sourceSiteLabel(animal.sourceSite)}</span>
             </div>
             <Link className="image-link" href={`/animal/${animal.id}`}>
               <Image alt={`${animal.breed} 사진`} src={animal.imageUrl} width={600} height={420} unoptimized />

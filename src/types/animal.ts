@@ -17,8 +17,17 @@ export type AnimalSearchParams = {
   gender?: string;
   neutered?: string;
   keywords?: string;
+  /** pawinhand | awtis — 비우면 전체 */
+  source?: string;
   page?: number;
   limit?: number;
+};
+
+export type AnimalSourceRow = {
+  sourceType: string;
+  sourceUrl: string;
+  sourceNoticeNo: string | null;
+  sourceDesertionNo: string | null;
 };
 
 export type AnimalWithShelter = {
@@ -39,6 +48,7 @@ export type AnimalWithShelter = {
   imageUrl: string;
   imageGallery: string;
   detailUrl: string;
+  sources: AnimalSourceRow[];
   shelter: {
     id: number;
     name: string;

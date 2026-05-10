@@ -432,6 +432,118 @@ dd {
   position: relative;
 }
 
+/* 포인핸드 상세와 유사: 좌측 이미지 + 우측 스펙 */
+.detail-media--pawinhand-ref {
+  position: relative;
+}
+
+.detail-image-status-badge {
+  background: #2563eb;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  left: 16px;
+  line-height: 1.2;
+  padding: 8px 12px;
+  position: absolute;
+  top: 16px;
+  z-index: 3;
+}
+
+.detail-panel--pawinhand-ref {
+  overflow: visible;
+}
+
+.detail-source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.detail-source-chip {
+  background: rgba(90, 107, 122, 0.12);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 6px 12px;
+}
+
+.detail-title-pawinhand {
+  font-size: clamp(1.45rem, 3vw, 2.1rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+  margin: 0 0 10px;
+}
+
+.detail-summary-pawinhand {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.5;
+  margin: 0 0 22px;
+}
+
+.detail-spec-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.detail-spec-row {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 1rem;
+  gap: 8px 12px;
+  line-height: 1.45;
+}
+
+.detail-spec-k {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-weight: 800;
+  min-width: 5.6em;
+}
+
+.detail-spec-v {
+  flex: 1 1 auto;
+  font-weight: 600;
+  min-width: 0;
+  word-break: keep-all;
+}
+
+.detail-notice-no-value {
+  color: var(--primary);
+  font-weight: 900;
+}
+
+.detail-tel-footnote {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.detail-platform-links--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+  max-width: 420px;
+}
+
+.detail-cta-link {
+  display: block;
+  text-align: center;
+  width: 100%;
+}
+
 .detail-panel .badges {
   left: auto;
   margin-bottom: 14px;
@@ -1123,6 +1235,41 @@ button.link-like {
 
 button.crawl-button {
   white-space: nowrap;
+}
+
+.crawl-actions--split {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 200px;
+}
+
+button.crawl-button--secondary {
+  background: #5a6b7a;
+}
+
+button.crawl-button--secondary:hover {
+  background: #46525e;
+}
+
+.detail-inquiry-hint {
+  margin: 0 0 12px;
+}
+
+.detail-platform-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.detail-platform-links .primary-link {
+  flex: 1 1 auto;
+  min-width: 140px;
+  text-align: center;
+}
+
+.detail-multi-source-hint {
+  margin: 0 0 12px;
 }
 
 @media (max-width: 900px) {

@@ -26,7 +26,8 @@ model Animal {
   imageGallery   String     @default("[]") @map("image_gallery")
   detailUrl      String     @map("detail_url")
   shelterId      Int        @map("shelter_id")
-  shelter        Shelter    @relation(fields: [shelterId], references: [id])
+  shelter        Shelter        @relation(fields: [shelterId], references: [id])
+  sources        AnimalSource[]
   alertLogs      AlertLog[]
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
@@ -35,6 +36,22 @@ model Animal {
   @@index([foundRegion])
   @@index([foundDate])
   @@map("animals")
+}
+
+/** 동일 개체가 포인핸드·AWTIS 등 여러 플랫폼에 올라온 경우 링크를 모두 보관 */
+model AnimalSource {
+  id                 Int    @id @default(autoincrement())
+  animalId           Int    @map("animal_id")
+  animal             Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  /** pawinhand | awtis */
+  sourceType         String @map("source_type")
+  sourceUrl          String @map("source_url")
+  sourceNoticeNo     String? @map("source_notice_no")
+  sourceDesertionNo  String? @map("source_desertion_no")
+
+  @@unique([animalId, sourceType])
+  @@index([sourceType])
+  @@map("animal_sources")
 }
 
 model Shelter {

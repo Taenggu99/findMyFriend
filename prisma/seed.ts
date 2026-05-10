@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import { galleryJsonFromUrls } from "../src/lib/animal-images";
+import { backfillPawinhandSources } from "../src/lib/animal-source-sync";
 import { prisma } from "../src/lib/db";
 
 
@@ -112,6 +113,8 @@ async function main() {
       shelterId: happyShelter.id
     }
   });
+
+  await backfillPawinhandSources(prisma);
 
   await prisma.user.upsert({
     where: { subscriberKey: "demo-subscriber-local" },

@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { collectBridgeImageUrls, galleryJsonFromUrls } from "@/lib/animal-images";
+import { upsertAnimalSource } from "@/lib/animal-source-sync";
 import {
   decodeHtmlEntities,
   fetchBridgeConditionPage,
@@ -178,7 +179,7 @@ async function upsertBridgeRow(prisma: PrismaClient, row: PawinhandBridgeAnimalR
   );
 
   try {
-    await prisma.animal.upsert({
+    const saved = await prisma.animal.upsert({
       where: {
         sourceSite_noticeNo: {
           sourceSite: SOURCE_SITE,
@@ -221,6 +222,13 @@ async function upsertBridgeRow(prisma: PrismaClient, row: PawinhandBridgeAnimalR
         detailUrl,
         shelterId: shelter.id
       }
+    });
+    await upsertAnimalSource(prisma, {
+      animalId: saved.id,
+      sourceType: SOURCE_SITE,
+      sourceUrl: detailUrl,
+      sourceNoticeNo: noticeNo,
+      sourceDesertionNo: null
     });
   } catch (e) {
     errors.push(`${noticeNo}: ${e instanceof Error ? e.message : String(e)}`);
@@ -360,7 +368,7 @@ export async function importPawinhandFromRss(prisma: PrismaClient): Promise<Pawi
     }
 
     try {
-      await prisma.animal.upsert({
+      const saved = await prisma.animal.upsert({
         where: {
           sourceSite_noticeNo: {
             sourceSite: SOURCE_SITE,
@@ -397,6 +405,13 @@ export async function importPawinhandFromRss(prisma: PrismaClient): Promise<Pawi
           detailUrl: pawinhandKrDetailUrl(noticeNo),
           shelterId: shelter.id
         }
+      });
+      await upsertAnimalSource(prisma, {
+        animalId: saved.id,
+        sourceType: SOURCE_SITE,
+        sourceUrl: pawinhandKrDetailUrl(noticeNo),
+        sourceNoticeNo: noticeNo,
+        sourceDesertionNo: null
       });
       upserted += 1;
     } catch (e) {

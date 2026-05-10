@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
   const gender = getSearchValue(request, "gender");
   const neutered = getSearchValue(request, "neutered");
   const keywords = splitKeywords(getSearchValue(request, "keywords"));
+  const source = getSearchValue(request, "source");
   const page = Math.max(Number(getSearchValue(request, "page")) || 1, 1);
   const limit = Math.min(Math.max(Number(getSearchValue(request, "limit")) || 12, 1), 50);
 
@@ -52,14 +53,30 @@ export async function GET(request: NextRequest) {
             }
           }))
         }
-      : {})
+      : {}),
+    ...(source === "pawinhand"
+      ? {
+          OR: [
+            { sources: { some: { sourceType: "pawinhand" } } },
+            { AND: [{ sourceSite: "pawinhand" }, { sources: { none: {} } }] }
+          ]
+        }
+      : source === "awtis"
+        ? {
+            OR: [
+              { sources: { some: { sourceType: "awtis" } } },
+              { AND: [{ sourceSite: "awtis" }, { sources: { none: {} } }] }
+            ]
+          }
+        : {})
   };
 
   const [animals, total] = await prisma.$transaction([
     prisma.animal.findMany({
       where,
       include: {
-        shelter: true
+        shelter: true,
+        sources: true
       },
       orderBy: {
         foundDate: "desc"

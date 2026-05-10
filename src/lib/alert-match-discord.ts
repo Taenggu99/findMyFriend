@@ -36,7 +36,7 @@ export async function runAlertMatchAndDiscord(
   discord: AlertDiscordResult;
 }> {
   const animals = await prisma.animal.findMany({
-    include: { shelter: true },
+    include: { shelter: true, sources: true },
     orderBy: { foundDate: "desc" }
   });
 

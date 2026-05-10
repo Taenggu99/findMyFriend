@@ -3,16 +3,57 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AnimalPhotoGallery } from "@/components/animal-photo-gallery";
+import {
+  buildPawinhandStyleSummaryLine,
+  detailStatusHeadline,
+  displayOrDash,
+  featuresTextForDetailList,
+  formatNoticePeriodCompact,
+  shelterLineWithPhone
+} from "@/lib/animal-detail-presentation";
 import { parseAnimalImageGalleryJson } from "@/lib/animal-images";
-import { formatKoreanDate } from "@/lib/date";
 import { prisma } from "@/lib/db";
 import { pawinhandKrDetailUrl } from "@/lib/pawinhand-bridge";
+import {
+  SOURCE_AWTIS,
+  SOURCE_MULTI,
+  SOURCE_PAWINHAND,
+  sourceSiteLabel,
+  sourceTypeLinkLabel
+} from "@/lib/source-constants";
 
 type PageProps = {
   params: Promise<{
     id: string;
   }>;
 };
+
+type PlatformLink = { sourceType: string; sourceUrl: string };
+
+function sortedPlatformLinks(animal: {
+  sourceSite: string;
+  noticeNo: string;
+  detailUrl: string;
+  sources: { sourceType: string; sourceUrl: string }[];
+}): PlatformLink[] {
+  const order = [SOURCE_PAWINHAND, SOURCE_AWTIS];
+  const src = animal.sources ?? [];
+  if (src.length > 0) {
+    return [...src].sort(
+      (a, b) => order.indexOf(a.sourceType) - order.indexOf(b.sourceType)
+    );
+  }
+  if (animal.sourceSite === SOURCE_AWTIS) {
+    return [{ sourceType: SOURCE_AWTIS, sourceUrl: animal.detailUrl }];
+  }
+  if (animal.sourceSite === SOURCE_MULTI) {
+    return [
+      { sourceType: SOURCE_PAWINHAND, sourceUrl: pawinhandKrDetailUrl(animal.noticeNo) },
+      { sourceType: SOURCE_AWTIS, sourceUrl: animal.detailUrl }
+    ];
+  }
+  return [{ sourceType: SOURCE_PAWINHAND, sourceUrl: pawinhandKrDetailUrl(animal.noticeNo) }];
+}
 
 export default async function AnimalDetailPage({ params }: PageProps) {
   const { id } = await params;
@@ -27,6 +68,7 @@ export default async function AnimalDetailPage({ params }: PageProps) {
       id: animalId
     },
     include: {
+      sources: true,
       shelter: {
         include: {
           animals: {
@@ -50,8 +92,14 @@ export default async function AnimalDetailPage({ params }: PageProps) {
   }
 
   const galleryUrls = parseAnimalImageGalleryJson(animal.imageGallery, animal.imageUrl);
-  const publicDetailHref =
-    animal.sourceSite === "pawinhand" ? pawinhandKrDetailUrl(animal.noticeNo) : animal.detailUrl;
+  const platformLinks = sortedPlatformLinks(animal);
+  const hasMultipleSources = (animal.sources?.length ?? 0) >= 2;
+  const statusHeadline = detailStatusHeadline(animal.status);
+  const summaryLine = buildPawinhandStyleSummaryLine(animal);
+  const periodLine = formatNoticePeriodCompact(animal.noticeStartAt, animal.noticeEndAt);
+  const shelterLine = shelterLineWithPhone(animal.shelter);
+  const jurisdiction = displayOrDash(animal.foundRegion);
+  const featuresText = featuresTextForDetailList(animal.features);
 
   return (
     <main>
@@ -59,83 +107,78 @@ export default async function AnimalDetailPage({ params }: PageProps) {
         검색으로 돌아가기
       </Link>
 
-      <article className="detail-layout">
-        <div className="detail-media">
+      <article className="detail-layout detail-layout--pawinhand-ref">
+        <div className="detail-media detail-media--pawinhand-ref">
+          <span className="detail-image-status-badge">{statusHeadline}</span>
           <AnimalPhotoGallery alt={`${animal.breed} 사진`} urls={galleryUrls} />
         </div>
 
-        <section className="detail-panel">
-          <div className="badges">
-            <span>{animal.status}</span>
-            <span>{animal.gender}</span>
-          </div>
-          <h1>
-            [{animal.category}] {animal.breed} <small>(중성화 {animal.neutered})</small>
+        <section className="detail-panel detail-panel--pawinhand-ref">
+          <p className="detail-source-chips">
+            <span className="detail-source-chip">{sourceSiteLabel(animal.sourceSite)}</span>
+          </p>
+
+          <h1 className="detail-title-pawinhand">
+            [{animal.category}] {animal.breed}
           </h1>
-          <dl className="detail-list">
-            <div>
-              <dt>공고번호</dt>
-              <dd>{animal.noticeNo}</dd>
+
+          <p className="detail-summary-pawinhand">{summaryLine}</p>
+
+          <div className="detail-spec-rows" aria-label="공고 상세">
+            <div className="detail-spec-row">
+              <span className="detail-spec-k">공고번호</span>
+              <span className="detail-spec-v detail-notice-no-value">{animal.noticeNo}</span>
             </div>
-            <div>
-              <dt>공고기간</dt>
-              <dd>
-                {formatKoreanDate(animal.noticeStartAt)} - {formatKoreanDate(animal.noticeEndAt)}
-              </dd>
+            <div className="detail-spec-row">
+              <span className="detail-spec-k">공고기간</span>
+              <span className="detail-spec-v">{periodLine}</span>
             </div>
-            <div>
-              <dt>발견날짜</dt>
-              <dd>{formatKoreanDate(animal.foundDate)}</dd>
+            <div className="detail-spec-row">
+              <span className="detail-spec-k">발견장소</span>
+              <span className="detail-spec-v">{displayOrDash(animal.foundLocation)}</span>
             </div>
-            <div>
-              <dt>발견장소</dt>
-              <dd>{animal.foundLocation}</dd>
+            <div className="detail-spec-row">
+              <span className="detail-spec-k">특이사항</span>
+              <span className="detail-spec-v">{featuresText}</span>
             </div>
-            <div>
-              <dt>특이사항</dt>
-              <dd>{animal.features}</dd>
+            <div className="detail-spec-row">
+              <span className="detail-spec-k">보호센터</span>
+              <span className="detail-spec-v">{shelterLine}</span>
             </div>
-          </dl>
-          <a className="primary-link" href={publicDetailHref} rel="noreferrer" target="_blank">
-            원본 공고 보기
-          </a>
+            <div className="detail-spec-row">
+              <span className="detail-spec-k">관할기관</span>
+              <span className="detail-spec-v">{jurisdiction}</span>
+            </div>
+          </div>
+
+          <p className="detail-tel-footnote">* 전화 문의는 보호소 운영시간 확인 후 이용 바랍니다.</p>
+
+          <div className="detail-platform-links detail-platform-links--stack">
+            {platformLinks.map((s) => (
+              <a
+                key={`${s.sourceType}-${s.sourceUrl}`}
+                className="primary-link detail-cta-link"
+                href={s.sourceUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                {sourceTypeLinkLabel(s.sourceType)}
+              </a>
+            ))}
+          </div>
+
+          {hasMultipleSources ? (
+            <p className="notice detail-multi-source-hint">
+              이 동물은 아래 플랫폼에서도 동일 공고로 확인할 수 있습니다.
+            </p>
+          ) : null}
+          {platformLinks.length >= 2 ? (
+            <p className="notice detail-inquiry-hint">
+              빠른 회신을 받으려면 <strong>포인핸드</strong>와 <strong>국가동물보호정보시스템</strong>에 각각 문의해 보세요.
+            </p>
+          ) : null}
         </section>
       </article>
-
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Shelter</p>
-            <h2>보호 단체 정보</h2>
-          </div>
-        </div>
-        <dl className="detail-list">
-          <div>
-            <dt>보호 단체</dt>
-            <dd>
-              <a href={animal.shelter.website} rel="noreferrer" target="_blank">
-                {animal.shelter.name}
-              </a>
-            </dd>
-          </div>
-          <div>
-            <dt>전화번호</dt>
-            <dd>{animal.shelter.phone}</dd>
-          </div>
-          <div>
-            <dt>주소</dt>
-            <dd>{animal.shelter.address}</dd>
-          </div>
-          <div>
-            <dt>웹사이트</dt>
-            <dd>
-              <a href={animal.shelter.website} rel="noreferrer" target="_blank">
-                {animal.shelter.website}
-              </a>
-            </dd>
-          </div>
-        </dl>
-      </section>
 
       <section className="panel">
         <div className="section-heading">
