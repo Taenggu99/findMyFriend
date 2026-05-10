@@ -95,6 +95,127 @@ function buildQuery(search: SearchState, page: number) {
   return params.toString();
 }
 
+type AlertConditionFieldsProps = {
+  alertLabel: string;
+  setAlertLabel: (v: string) => void;
+  alertCategory: string;
+  setAlertCategory: (v: string) => void;
+  alertBreed: string;
+  setAlertBreed: (v: string) => void;
+  alertRegion: string;
+  setAlertRegion: (v: string) => void;
+  alertGender: string;
+  setAlertGender: (v: string) => void;
+  alertNeutered: string;
+  setAlertNeutered: (v: string) => void;
+  alertKeywords: string;
+  setAlertKeywords: (v: string) => void;
+};
+
+function AlertConditionFields({
+  alertLabel,
+  setAlertLabel,
+  alertCategory,
+  setAlertCategory,
+  alertBreed,
+  setAlertBreed,
+  alertRegion,
+  setAlertRegion,
+  alertGender,
+  setAlertGender,
+  alertNeutered,
+  setAlertNeutered,
+  alertKeywords,
+  setAlertKeywords
+}: AlertConditionFieldsProps) {
+  return (
+    <>
+      <label className="wide">
+        알림 이름 <span className="optional">(이 규칙 구분용)</span>
+        <input
+          placeholder="예: 우리 집 말티즈"
+          type="text"
+          value={alertLabel}
+          onChange={(e) => setAlertLabel(e.target.value)}
+        />
+      </label>
+      <label>
+        품종
+        <select
+          value={alertCategory}
+          onChange={(event) => {
+            setAlertCategory(event.target.value);
+            setAlertBreed("");
+          }}
+        >
+          <option value="">전체</option>
+          {animalCategories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        세부 품종
+        <select
+          disabled={!alertCategory}
+          value={alertBreed}
+          onChange={(event) => setAlertBreed(event.target.value)}
+        >
+          <option value="">전체</option>
+          {breedsForCategory(alertCategory).map((b) => (
+            <option key={b} value={b}>
+              {b}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        지역
+        <select value={alertRegion} onChange={(e) => setAlertRegion(e.target.value)}>
+          <option value="">전체</option>
+          {regions.map((region) => (
+            <option key={region} value={region}>
+              {region}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        성별
+        <select value={alertGender} onChange={(e) => setAlertGender(e.target.value)}>
+          <option value="">전체</option>
+          {animalGenders.map((gender) => (
+            <option key={gender} value={gender}>
+              {gender}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        중성화
+        <select value={alertNeutered} onChange={(e) => setAlertNeutered(e.target.value)}>
+          <option value="">전체</option>
+          {neuteredOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="wide">
+        특징
+        <input
+          placeholder="예: 갈색 빨간목줄"
+          value={alertKeywords}
+          onChange={(e) => setAlertKeywords(e.target.value)}
+        />
+      </label>
+    </>
+  );
+}
+
 export function SearchExperience() {
   const defaultSearch = useMemo(
     () => ({
@@ -131,6 +252,8 @@ export function SearchExperience() {
   const [alertNeutered, setAlertNeutered] = useState("");
   const [alertKeywords, setAlertKeywords] = useState("");
   const [editingAlertId, setEditingAlertId] = useState<number | null>(null);
+  const [showAddAlertForm, setShowAddAlertForm] = useState(false);
+  const [alertModalOpen, setAlertModalOpen] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const fetchAnimals = useCallback(
@@ -205,6 +328,21 @@ export function SearchExperience() {
     return () => observer.disconnect();
   }, [fetchAnimals, hasMore, isLoading, page]);
 
+  useEffect(() => {
+    if (!alertModalOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevHtmlOs = document.documentElement.style.overscrollBehavior;
+    const prevBodyOs = document.body.style.overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overscrollBehavior = "none";
+    document.body.style.overscrollBehavior = "none";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.documentElement.style.overscrollBehavior = prevHtmlOs;
+      document.body.style.overscrollBehavior = prevBodyOs;
+    };
+  }, [alertModalOpen]);
+
   function resetAlertForm() {
     setEditingAlertId(null);
     setAlertLabel("");
@@ -216,7 +354,19 @@ export function SearchExperience() {
     setAlertKeywords("");
   }
 
+  function openAddAlertForm() {
+    resetAlertForm();
+    setShowAddAlertForm(true);
+  }
+
+  function closeAlertModal() {
+    setAlertModalOpen(false);
+    setShowAddAlertForm(false);
+    resetAlertForm();
+  }
+
   function beginEdit(a: SavedAlertRow) {
+    setShowAddAlertForm(false);
     setEditingAlertId(a.id);
     setAlertLabel(a.label ?? "");
     setAlertCategory(a.category ?? "");
@@ -226,6 +376,17 @@ export function SearchExperience() {
     setAlertNeutered(a.neutered ?? "");
     setAlertKeywords(a.featureKeywords ?? "");
   }
+
+  useEffect(() => {
+    if (!alertModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeAlertModal();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // closeAlertModal는 모달이 열린 동안 동일 동작만 수행
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertModalOpen]);
 
   async function deleteAlert(id: number) {
     if (!window.confirm("이 알림 조건을 삭제할까요?")) {
@@ -276,14 +437,12 @@ export function SearchExperience() {
     void fetchAnimals(1);
   }
 
-  async function onAlertSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function persistAlert(): Promise<boolean> {
     const subscriberKey = readOrCreateSubscriberKey();
 
     if (!subscriberKey) {
       setAlertMessage("이 브라우저에서 구독 ID를 만들 수 없습니다. 쿠키/저장소를 허용했는지 확인해 주세요.");
-      return;
+      return false;
     }
 
     setAlertMessage("알림 조건을 저장하는 중입니다.");
@@ -299,47 +458,57 @@ export function SearchExperience() {
       featureKeywords: alertKeywords.trim() || undefined
     };
 
-    const url = editingAlertId ? `/api/alerts/${editingAlertId}` : "/api/alerts";
-    const method = editingAlertId ? "PATCH" : "POST";
+    const id = editingAlertId;
+    const url = id ? `/api/alerts/${id}` : "/api/alerts";
+    const method = id ? "PATCH" : "POST";
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
 
-    const data = (await response.json()) as {
-      message?: string;
-      matches?: unknown[];
-      discord?: { sent: boolean; skippedReason?: string; error?: string };
-    };
+      const data = (await response.json()) as {
+        message?: string;
+        matches?: unknown[];
+        discord?: { sent: boolean; skippedReason?: string; error?: string };
+      };
 
-    if (!response.ok) {
-      setAlertMessage(data.message ?? "알림 조건 저장에 실패했습니다.");
-      return;
+      if (!response.ok) {
+        setAlertMessage(data.message ?? "알림 조건 저장에 실패했습니다.");
+        return false;
+      }
+
+      const matchCount = data.matches?.length ?? 0;
+      const discord = data.discord;
+
+      let extra = "";
+      if (discord?.sent) {
+        extra = ` Discord 채널로 매칭 ${matchCount}건 요약을 보냈습니다.`;
+      } else if (discord?.skippedReason === "DISCORD_WEBHOOK_URL 미설정") {
+        extra = " (서버에 DISCORD_WEBHOOK_URL이 없어 Discord로는 보내지 않았습니다.)";
+      } else if (discord?.skippedReason === "70점 이상 매칭 없음") {
+        extra = " (70점 이상 매칭이 없어 Discord 메시지는 생략했습니다.)";
+      } else if (discord?.error) {
+        extra = ` Discord 전송 실패: ${discord.error}`;
+      }
+
+      setAlertMessage(
+        `${id ? "알림 조건을 수정했습니다." : "알림 조건을 추가했습니다."} 현재 ${matchCount}건이 70점 이상으로 매칭되었습니다.${extra}`
+      );
+      if (id === null) {
+        setShowAddAlertForm(false);
+      }
+      resetAlertForm();
+      setAlertListTick((t) => t + 1);
+      return true;
+    } catch {
+      setAlertMessage("알림 조건 저장 중 오류가 발생했습니다.");
+      return false;
     }
-
-    const matchCount = data.matches?.length ?? 0;
-    const discord = data.discord;
-
-    let extra = "";
-    if (discord?.sent) {
-      extra = ` Discord 채널로 매칭 ${matchCount}건 요약을 보냈습니다.`;
-    } else if (discord?.skippedReason === "DISCORD_WEBHOOK_URL 미설정") {
-      extra = " (서버에 DISCORD_WEBHOOK_URL이 없어 Discord로는 보내지 않았습니다.)";
-    } else if (discord?.skippedReason === "70점 이상 매칭 없음") {
-      extra = " (70점 이상 매칭이 없어 Discord 메시지는 생략했습니다.)";
-    } else if (discord?.error) {
-      extra = ` Discord 전송 실패: ${discord.error}`;
-    }
-
-    setAlertMessage(
-      `${editingAlertId ? "알림 조건을 수정했습니다." : "알림 조건을 추가했습니다."} 현재 ${matchCount}건이 70점 이상으로 매칭되었습니다.${extra}`
-    );
-    resetAlertForm();
-    setAlertListTick((t) => t + 1);
   }
 
   async function runPawinhandCrawl() {
@@ -427,117 +596,121 @@ export function SearchExperience() {
 
       {crawlInfo ? <p className="notice">{crawlInfo}</p> : null}
 
-      <section className="panel">
+      <section className="panel search-panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Search</p>
             <h2>보호 동물 검색</h2>
           </div>
-          <span>{total}건</span>
+          <div className="section-heading-actions">
+            <span className="total-pill">{total}건</span>
+            <button
+              className="alert-open-btn"
+              type="button"
+              onClick={() => setAlertModalOpen(true)}
+            >
+              내 알림 조건 설정하기
+            </button>
+          </div>
         </div>
 
-        <form className="search-form" onSubmit={onSubmit}>
-          <label className="checkbox-label">
-            <input
-              checked={search.useDefaultPeriod}
-              type="checkbox"
-              onChange={(event) => updateSearch("useDefaultPeriod", event.target.checked)}
-            />
-            최근 3개월 기본 검색
-          </label>
+        <form className="search-form search-form-stacked" onSubmit={onSubmit}>
+          <div className="search-form-row">
+            <label>
+              시작일
+              <input
+                disabled={search.useDefaultPeriod}
+                type="date"
+                value={search.from}
+                onChange={(event) => updateSearch("from", event.target.value)}
+              />
+            </label>
+            <label>
+              종료일
+              <input
+                disabled={search.useDefaultPeriod}
+                type="date"
+                value={search.to}
+                onChange={(event) => updateSearch("to", event.target.value)}
+              />
+            </label>
+            <label className="checkbox-label">
+              <input
+                checked={search.useDefaultPeriod}
+                type="checkbox"
+                onChange={(event) => updateSearch("useDefaultPeriod", event.target.checked)}
+              />
+              최근 3개월 기본 검색
+            </label>
+          </div>
 
-          <label>
-            시작일
-            <input
-              disabled={search.useDefaultPeriod}
-              type="date"
-              value={search.from}
-              onChange={(event) => updateSearch("from", event.target.value)}
-            />
-          </label>
+          <div className="search-form-row cols-1">
+            <label className="wide">
+              발견 지역
+              <select value={search.region} onChange={(event) => updateSearch("region", event.target.value)}>
+                <option value="">전체</option>
+                {regions.map((region) => (
+                  <option key={region} value={region}>
+                    {region}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-          <label>
-            종료일
-            <input
-              disabled={search.useDefaultPeriod}
-              type="date"
-              value={search.to}
-              onChange={(event) => updateSearch("to", event.target.value)}
-            />
-          </label>
+          <div className="search-form-row cols-2">
+            <label>
+              품종
+              <select value={search.category} onChange={(event) => updateSearch("category", event.target.value)}>
+                <option value="">전체</option>
+                {animalCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              세부 품종
+              <select
+                disabled={!search.category}
+                value={search.breed}
+                onChange={(event) => updateSearch("breed", event.target.value)}
+              >
+                <option value="">전체</option>
+                {breedsForCategory(search.category).map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-          <label>
-            발견 지역
-            <select value={search.region} onChange={(event) => updateSearch("region", event.target.value)}>
-              <option value="">전체</option>
-              {regions.map((region) => (
-                <option key={region} value={region}>
-                  {region}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            품종 카테고리
-            <select value={search.category} onChange={(event) => updateSearch("category", event.target.value)}>
-              <option value="">전체</option>
-              {animalCategories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            세부 품종
-            <select
-              disabled={!search.category}
-              value={search.breed}
-              onChange={(event) => updateSearch("breed", event.target.value)}
-            >
-              <option value="">전체</option>
-              {breedsForCategory(search.category).map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            성별
-            <select value={search.gender} onChange={(event) => updateSearch("gender", event.target.value)}>
-              <option value="">전체</option>
-              {animalGenders.map((gender) => (
-                <option key={gender} value={gender}>
-                  {gender}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            중성화
-            <select value={search.neutered} onChange={(event) => updateSearch("neutered", event.target.value)}>
-              <option value="">전체</option>
-              {neuteredOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="wide">
-            특징 키워드
-            <input
-              placeholder="예: 갈색 빨간목줄 겁많음"
-              value={search.keywords}
-              onChange={(event) => updateSearch("keywords", event.target.value)}
-            />
-          </label>
+          <div className="search-form-row cols-2">
+            <label>
+              성별
+              <select value={search.gender} onChange={(event) => updateSearch("gender", event.target.value)}>
+                <option value="">전체</option>
+                {animalGenders.map((gender) => (
+                  <option key={gender} value={gender}>
+                    {gender}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              중성화
+              <select value={search.neutered} onChange={(event) => updateSearch("neutered", event.target.value)}>
+                <option value="">전체</option>
+                {neuteredOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <button type="submit">{isLoading ? "검색 중" : "검색"}</button>
         </form>
@@ -582,143 +755,187 @@ export function SearchExperience() {
         {isLoading ? "불러오는 중..." : hasMore ? "스크롤하면 더 불러옵니다." : "마지막 결과입니다."}
       </div>
 
-      <section className="panel alert-panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Alert</p>
-            <h2>실시간 알림 조건</h2>
+      {alertModalOpen ? (
+        <div className="alert-modal-backdrop" role="presentation" onClick={() => closeAlertModal()}>
+          <div
+            className="alert-modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="alert-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="alert-modal-header">
+              <div className="alert-modal-header-text">
+                <p className="eyebrow">Alert</p>
+                <h2 id="alert-modal-title">실시간 알림 조건 설정</h2>
+              </div>
+              <button type="button" className="alert-modal-close" aria-label="알림 설정 닫기" onClick={closeAlertModal}>
+                ×
+              </button>
+            </header>
+            <div className="alert-modal-body">
+              <div className="alert-panel alert-panel--modal">
+                <p className="alert-hint">
+                  조건을 여러 개 저장할 수 있습니다. 각 규칙마다 <strong>알림 이름</strong>을 붙이면 Discord에서 구분하기
+                  쉽습니다. 70점 이상 매칭이 있을 때만 웹훅으로 보내며, 동물마다 <strong>사진 썸네일</strong>이 붙습니다.
+                </p>
+
+                {savedAlerts.length > 0 ? (
+                  <ul className="saved-alerts-list" aria-label="저장된 알림 목록">
+                    {savedAlerts.map((a) => (
+                      <li
+                        className={`saved-alert-item${editingAlertId === a.id ? " is-editing" : ""}`}
+                        key={a.id}
+                      >
+                        <div
+                          className={`saved-alert-top${editingAlertId === a.id ? "" : " saved-alert-top--clickable"}`}
+                          role={editingAlertId === a.id ? undefined : "button"}
+                          tabIndex={editingAlertId === a.id ? undefined : 0}
+                          onClick={() => {
+                            if (editingAlertId !== a.id) beginEdit(a);
+                          }}
+                          onKeyDown={(e) => {
+                            if (editingAlertId === a.id) return;
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              beginEdit(a);
+                            }
+                          }}
+                        >
+                          <div className="saved-alert-body">
+                            <strong>{a.label?.trim() || `알림 #${a.id}`}</strong>
+                            <span className="saved-alerts-meta">
+                              {[a.category, a.breed || "품종 전체", a.region || "지역 전체"].filter(Boolean).join(" · ")}{" "}
+                              · {formatKoreanDate(a.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {editingAlertId === a.id ? (
+                          <form
+                            className="search-form alert-form saved-alert-inline-form"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              void persistAlert();
+                            }}
+                          >
+                            <AlertConditionFields
+                              alertLabel={alertLabel}
+                              setAlertLabel={setAlertLabel}
+                              alertCategory={alertCategory}
+                              setAlertCategory={setAlertCategory}
+                              alertBreed={alertBreed}
+                              setAlertBreed={setAlertBreed}
+                              alertRegion={alertRegion}
+                              setAlertRegion={setAlertRegion}
+                              alertGender={alertGender}
+                              setAlertGender={setAlertGender}
+                              alertNeutered={alertNeutered}
+                              setAlertNeutered={setAlertNeutered}
+                              alertKeywords={alertKeywords}
+                              setAlertKeywords={setAlertKeywords}
+                            />
+                            <div className="saved-alert-inline-actions">
+                              <button type="submit">저장</button>
+                              <button type="button" className="alert-row-btn" onClick={() => resetAlertForm()}>
+                                취소
+                              </button>
+                              <button
+                                type="button"
+                                className="alert-row-btn danger"
+                                onClick={() => void deleteAlert(a.id)}
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="saved-alert-actions">
+                            <button
+                              className="alert-row-btn"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                beginEdit(a);
+                              }}
+                            >
+                              수정
+                            </button>
+                            <button
+                              className="alert-row-btn danger"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void deleteAlert(a.id);
+                              }}
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                {showAddAlertForm ? (
+                  <form
+                    className="search-form alert-form alert-add-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void persistAlert();
+                    }}
+                  >
+                    <p className="alert-add-form-title">새 알림 조건</p>
+                    <AlertConditionFields
+                      alertLabel={alertLabel}
+                      setAlertLabel={setAlertLabel}
+                      alertCategory={alertCategory}
+                      setAlertCategory={setAlertCategory}
+                      alertBreed={alertBreed}
+                      setAlertBreed={setAlertBreed}
+                      alertRegion={alertRegion}
+                      setAlertRegion={setAlertRegion}
+                      alertGender={alertGender}
+                      setAlertGender={setAlertGender}
+                      alertNeutered={alertNeutered}
+                      setAlertNeutered={setAlertNeutered}
+                      alertKeywords={alertKeywords}
+                      setAlertKeywords={setAlertKeywords}
+                    />
+                    <div className="alert-add-form-actions alert-form-actions">
+                      <button type="submit">저장</button>
+                      <button
+                        type="button"
+                        className="alert-row-btn"
+                        onClick={() => {
+                          setShowAddAlertForm(false);
+                          resetAlertForm();
+                        }}
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="alert-add-toolbar">
+                    <button
+                      type="button"
+                      className="alert-add-circle"
+                      aria-label="알림 조건 추가"
+                      onClick={openAddAlertForm}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+
+                {alertMessage ? <p className="notice">{alertMessage}</p> : null}
+              </div>
+            </div>
           </div>
         </div>
-        <p className="alert-hint">
-          조건을 여러 개 저장할 수 있습니다. 각 규칙마다 <strong>알림 이름</strong>을 붙이면 Discord에서 구분하기 쉽습니다. 70점
-          이상 매칭이 있을 때만 웹훅으로 보내며, 동물마다 <strong>사진 썸네일</strong>이 붙습니다.
-        </p>
-
-        {savedAlerts.length > 0 ? (
-          <ul className="saved-alerts-list" aria-label="저장된 알림 목록">
-            {savedAlerts.map((a) => (
-              <li className="saved-alert-item" key={a.id}>
-                <div className="saved-alert-body">
-                  <strong>{a.label?.trim() || `알림 #${a.id}`}</strong>
-                  <span className="saved-alerts-meta">
-                    {[a.category, a.breed || "품종 전체", a.region || "지역 전체"].filter(Boolean).join(" · ")} ·{" "}
-                    {formatKoreanDate(a.createdAt)}
-                  </span>
-                </div>
-                <div className="saved-alert-actions">
-                  <button className="alert-row-btn" type="button" onClick={() => beginEdit(a)}>
-                    수정
-                  </button>
-                  <button
-                    className="alert-row-btn danger"
-                    type="button"
-                    onClick={() => void deleteAlert(a.id)}
-                  >
-                    삭제
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        <form className="search-form alert-form" onSubmit={onAlertSubmit}>
-          {editingAlertId ? (
-            <p className="alert-editing-banner">
-              알림 #{editingAlertId} 수정 중 —{" "}
-              <button className="link-like" type="button" onClick={() => resetAlertForm()}>
-                취소
-              </button>
-            </p>
-          ) : null}
-          <label className="wide">
-            알림 이름 <span className="optional">(이 규칙 구분용)</span>
-            <input
-              placeholder="예: 우리 집 말티즈"
-              type="text"
-              value={alertLabel}
-              onChange={(e) => setAlertLabel(e.target.value)}
-            />
-          </label>
-          <label>
-            품종 카테고리
-            <select
-              value={alertCategory}
-              onChange={(event) => {
-                setAlertCategory(event.target.value);
-                setAlertBreed("");
-              }}
-            >
-              <option value="">전체</option>
-              {animalCategories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            세부 품종
-            <select
-              disabled={!alertCategory}
-              value={alertBreed}
-              onChange={(event) => setAlertBreed(event.target.value)}
-            >
-              <option value="">전체</option>
-              {breedsForCategory(alertCategory).map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            지역
-            <select value={alertRegion} onChange={(e) => setAlertRegion(e.target.value)}>
-              <option value="">전체</option>
-              {regions.map((region) => (
-                <option key={region} value={region}>
-                  {region}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            성별
-            <select value={alertGender} onChange={(e) => setAlertGender(e.target.value)}>
-              <option value="">전체</option>
-              {animalGenders.map((gender) => (
-                <option key={gender} value={gender}>
-                  {gender}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            중성화
-            <select value={alertNeutered} onChange={(e) => setAlertNeutered(e.target.value)}>
-              <option value="">전체</option>
-              {neuteredOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="wide">
-            특징
-            <input
-              placeholder="예: 갈색 빨간목줄"
-              value={alertKeywords}
-              onChange={(e) => setAlertKeywords(e.target.value)}
-            />
-          </label>
-          <div className="alert-form-actions">
-            <button type="submit">{editingAlertId ? "조건 저장" : "이 조건 알림 추가"}</button>
-          </div>
-        </form>
-        {alertMessage ? <p className="notice">{alertMessage}</p> : null}
-      </section>
+      ) : null}
     </main>
   );
 }

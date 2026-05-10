@@ -24,6 +24,9 @@ export type PawinhandBridgeAnimalRow = {
   city?: string;
   country?: string;
   image?: string | null;
+  image2?: string | null;
+  image3?: string | null;
+  more_image1?: string | null;
   detail_url?: string | null;
 };
 
@@ -106,12 +109,13 @@ export function mapBridgeStatus(state: string | undefined): string {
   return "완료";
 }
 
-export function normalizePawinhandDetailUrl(notifyNumber: string, raw: string | null | undefined): string {
-  const u = (raw ?? "").trim();
-  if (u.startsWith("http://") || u.startsWith("https://")) {
-    return u;
-  }
-  return `https://pawinhand.kr/shelter/animal/detail/${encodeURIComponent(notifyNumber)}`;
+/** 포인핸드 웹 상세 (공고번호 기준, 브리지의 detail_url과 무관하게 동일 규칙 사용) */
+export function pawinhandKrDetailUrl(noticeNo: string): string {
+  return `https://pawinhand.kr/shelter/animal/detail/${encodeURIComponent((noticeNo ?? "").trim())}`;
+}
+
+export function normalizePawinhandDetailUrl(notifyNumber: string): string {
+  return pawinhandKrDetailUrl(notifyNumber);
 }
 
 export function pickImageUrl(image: string | null | undefined, placeholder: string): string {

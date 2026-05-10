@@ -2,8 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { prisma } from "@/lib/db";
+import { AnimalPhotoGallery } from "@/components/animal-photo-gallery";
+import { parseAnimalImageGalleryJson } from "@/lib/animal-images";
 import { formatKoreanDate } from "@/lib/date";
+import { prisma } from "@/lib/db";
+import { pawinhandKrDetailUrl } from "@/lib/pawinhand-bridge";
 
 type PageProps = {
   params: Promise<{
@@ -46,6 +49,10 @@ export default async function AnimalDetailPage({ params }: PageProps) {
     notFound();
   }
 
+  const galleryUrls = parseAnimalImageGalleryJson(animal.imageGallery, animal.imageUrl);
+  const publicDetailHref =
+    animal.sourceSite === "pawinhand" ? pawinhandKrDetailUrl(animal.noticeNo) : animal.detailUrl;
+
   return (
     <main>
       <Link className="back-link" href="/">
@@ -53,8 +60,8 @@ export default async function AnimalDetailPage({ params }: PageProps) {
       </Link>
 
       <article className="detail-layout">
-        <div className="detail-image">
-          <Image alt={`${animal.breed} 사진`} src={animal.imageUrl} width={900} height={720} priority unoptimized />
+        <div className="detail-media">
+          <AnimalPhotoGallery alt={`${animal.breed} 사진`} urls={galleryUrls} />
         </div>
 
         <section className="detail-panel">
@@ -89,7 +96,7 @@ export default async function AnimalDetailPage({ params }: PageProps) {
               <dd>{animal.features}</dd>
             </div>
           </dl>
-          <a className="primary-link" href={animal.detailUrl} rel="noreferrer" target="_blank">
+          <a className="primary-link" href={publicDetailHref} rel="noreferrer" target="_blank">
             원본 공고 보기
           </a>
         </section>

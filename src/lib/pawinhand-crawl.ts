@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
+import { collectBridgeImageUrls, galleryJsonFromUrls } from "@/lib/animal-images";
 import {
   decodeHtmlEntities,
   fetchBridgeConditionPage,
@@ -7,7 +8,7 @@ import {
   mapBridgeNeutral,
   mapBridgeSex,
   mapBridgeStatus,
-  normalizePawinhandDetailUrl,
+  pawinhandKrDetailUrl,
   parseCompactDate,
   pickImageUrl,
   type BridgeQueryOptions,
@@ -168,8 +169,13 @@ async function upsertBridgeRow(prisma: PrismaClient, row: PawinhandBridgeAnimalR
   ].filter(Boolean);
   const features = featureParts.length > 0 ? featureParts.join(" · ") : "-";
 
-  const detailUrl = normalizePawinhandDetailUrl(noticeNo, row.detail_url);
-  const imageUrl = pickImageUrl(row.image, PLACEHOLDER_IMAGE);
+  const detailUrl = pawinhandKrDetailUrl(noticeNo);
+  const bridgeUrls = collectBridgeImageUrls(row);
+  const imageUrl =
+    bridgeUrls.length > 0 ? bridgeUrls[0] : pickImageUrl(row.image, PLACEHOLDER_IMAGE);
+  const imageGallery = galleryJsonFromUrls(
+    bridgeUrls.length > 0 ? bridgeUrls : [imageUrl]
+  );
 
   try {
     await prisma.animal.upsert({
@@ -194,6 +200,7 @@ async function upsertBridgeRow(prisma: PrismaClient, row: PawinhandBridgeAnimalR
         noticeEndAt,
         features,
         imageUrl,
+        imageGallery,
         detailUrl,
         shelterId: shelter.id
       },
@@ -210,6 +217,7 @@ async function upsertBridgeRow(prisma: PrismaClient, row: PawinhandBridgeAnimalR
         noticeEndAt,
         features,
         imageUrl,
+        imageGallery,
         detailUrl,
         shelterId: shelter.id
       }
@@ -374,7 +382,8 @@ export async function importPawinhandFromRss(prisma: PrismaClient): Promise<Pawi
           noticeEndAt: null,
           features: `${item.title} · ${item.shelterName}`,
           imageUrl: PLACEHOLDER_IMAGE,
-          detailUrl: item.link,
+          imageGallery: galleryJsonFromUrls([PLACEHOLDER_IMAGE]),
+          detailUrl: pawinhandKrDetailUrl(noticeNo),
           shelterId: shelter.id
         },
         update: {
@@ -385,7 +394,7 @@ export async function importPawinhandFromRss(prisma: PrismaClient): Promise<Pawi
           foundRegion,
           foundDate: item.pubDate,
           features: `${item.title} · ${item.shelterName}`,
-          detailUrl: item.link,
+          detailUrl: pawinhandKrDetailUrl(noticeNo),
           shelterId: shelter.id
         }
       });

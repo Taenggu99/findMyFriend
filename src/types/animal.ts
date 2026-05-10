@@ -37,6 +37,7 @@ export type AnimalWithShelter = {
   noticeEndAt: string | null;
   features: string;
   imageUrl: string;
+  imageGallery: string;
   detailUrl: string;
   shelter: {
     id: number;

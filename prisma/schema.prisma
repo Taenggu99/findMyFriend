@@ -22,6 +22,8 @@ model Animal {
   noticeEndAt    DateTime?  @map("notice_end_at")
   features       String
   imageUrl       String     @map("image_url")
+  /** JSON 배열 문자열: ["https://...", ...] — 상세 갤러리·추가 사진 */
+  imageGallery   String     @default("[]") @map("image_gallery")
   detailUrl      String     @map("detail_url")
   shelterId      Int        @map("shelter_id")
   shelter        Shelter    @relation(fields: [shelterId], references: [id])

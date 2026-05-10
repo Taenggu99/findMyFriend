@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+import { galleryJsonFromUrls } from "../src/lib/animal-images";
 import { prisma } from "../src/lib/db";
 
 
@@ -48,6 +49,11 @@ async function main() {
       features: "갈색 토이푸들 빨간목줄 겁많음",
       imageUrl:
         "https://images.unsplash.com/photo-1605244863941-3a3ed921c60d?auto=format&fit=crop&w=900&q=80",
+      imageGallery: galleryJsonFromUrls([
+        "https://images.unsplash.com/photo-1605244863941-3a3ed921c60d?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1587300003388-59208cc962cb?auto=format&fit=crop&w=900&q=80"
+      ]),
       detailUrl: "https://pawinhand.kr/shelter/animal/detail/FMF-2026-001",
       shelterId: happyShelter.id
     }
@@ -72,6 +78,9 @@ async function main() {
       features: "치즈태비 초록눈 사람좋아함",
       imageUrl:
         "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=900&q=80",
+      imageGallery: galleryJsonFromUrls([
+        "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=900&q=80"
+      ]),
       detailUrl: "https://pawinhand.kr/shelter/animal/detail/FMF-2026-002",
       shelterId: greenShelter.id
     }
@@ -96,6 +105,9 @@ async function main() {
       features: "흰색 갈색반점 파란하네스",
       imageUrl:
         "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=900&q=80",
+      imageGallery: galleryJsonFromUrls([
+        "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=900&q=80"
+      ]),
       detailUrl: "https://pawinhand.kr/shelter/animal/detail/FMF-2026-003",
       shelterId: happyShelter.id
     }
