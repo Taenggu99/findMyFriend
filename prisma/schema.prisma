@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Animal {
+  id             Int        @id @default(autoincrement())
+  sourceSite     String     @map("source_site")
+  noticeNo       String     @map("notice_no")
+  status         String
+  category       String
+  breed          String
+  gender         String
+  neutered       String
+  foundLocation  String     @map("found_location")
+  foundRegion    String     @map("found_region")
+  foundDate      DateTime   @map("found_date")
+  noticeStartAt  DateTime?  @map("notice_start_at")
+  noticeEndAt    DateTime?  @map("notice_end_at")
+  features       String
+  imageUrl       String     @map("image_url")
+  detailUrl      String     @map("detail_url")
+  shelterId      Int        @map("shelter_id")
+  shelter        Shelter    @relation(fields: [shelterId], references: [id])
+  alertLogs      AlertLog[]
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  @@unique([sourceSite, noticeNo])
+  @@index([foundRegion])
+  @@index([foundDate])
+  @@map("animals")
+}
+
+model Shelter {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String
+  address   String
+  website   String
+  animals   Animal[]
+
+  @@map("shelters")
+}
+
+model User {
+  id        Int         @id @default(autoincrement())
+  email     String      @unique
+  password  String?
+  alerts    UserAlert[]
+  alertLogs AlertLog[]
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model UserAlert {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  user            User     @relation(fields: [userId], references: [id])
+  breed           String?
+  region          String?
+  gender          String?
+  neutered        String?
+  featureKeywords String   @map("feature_keywords")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("user_alerts")
+}
+
+model AlertLog {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  user         User     @relation(fields: [userId], references: [id])
+  animalId     Int      @map("animal_id")
+  animal       Animal   @relation(fields: [animalId], references: [id])
+  matchedScore Int      @map("matched_score")
+  sentAt       DateTime @default(now()) @map("sent_at")
+
+  @@unique([userId, animalId])
+  @@map("alert_logs")
+}
