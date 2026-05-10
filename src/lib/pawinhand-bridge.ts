@@ -90,6 +90,7 @@ export function decodeHtmlEntities(text: string): string {
 export function mapBridgeSex(code: string | undefined): string {
   if (code === "F") return "암컷";
   if (code === "M") return "수컷";
+  if (code === "Q") return "미상";
   return "미상";
 }
 

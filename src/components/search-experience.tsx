@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { breedsForCategory } from "@/data/breeds-by-category";
 import { formatKoreanDate, monthsAgo, toDateInputValue } from "@/lib/date";
 import {
   animalCategories,
@@ -18,9 +19,22 @@ type SearchState = {
   to: string;
   region: string;
   category: string;
+  breed: string;
   gender: string;
   neutered: string;
   keywords: string;
+};
+
+type SavedAlertRow = {
+  id: number;
+  label: string | null;
+  category: string | null;
+  breed: string | null;
+  region: string | null;
+  gender: string | null;
+  neutered: string | null;
+  featureKeywords: string;
+  createdAt: string;
 };
 
 type AnimalResponse = {
@@ -29,7 +43,25 @@ type AnimalResponse = {
   hasMore: boolean;
 };
 
-const regions = ["서울특별시", "경기도", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시", "울산광역시", "제주특별자치도"];
+const regions = [
+  "서울특별시",
+  "부산광역시",
+  "대구광역시",
+  "인천광역시",
+  "광주광역시",
+  "대전광역시",
+  "울산광역시",
+  "세종특별자치시",
+  "경기도",
+  "강원특별자치도",
+  "충청북도",
+  "충청남도",
+  "전북특별자치도",
+  "전라남도",
+  "경상북도",
+  "경상남도",
+  "제주특별자치도"
+];
 const limit = 9;
 const SUBSCRIBER_KEY_STORAGE = "findmyfriend_subscriber_key";
 
@@ -71,6 +103,7 @@ export function SearchExperience() {
       to: toDateInputValue(new Date()),
       region: "",
       category: "",
+      breed: "",
       gender: "",
       neutered: "",
       keywords: ""
@@ -88,6 +121,16 @@ export function SearchExperience() {
   const [alertMessage, setAlertMessage] = useState("");
   const [crawlLoading, setCrawlLoading] = useState(false);
   const [crawlInfo, setCrawlInfo] = useState("");
+  const [savedAlerts, setSavedAlerts] = useState<SavedAlertRow[]>([]);
+  const [alertListTick, setAlertListTick] = useState(0);
+  const [alertCategory, setAlertCategory] = useState("");
+  const [alertBreed, setAlertBreed] = useState("");
+  const [alertLabel, setAlertLabel] = useState("");
+  const [alertRegion, setAlertRegion] = useState("");
+  const [alertGender, setAlertGender] = useState("");
+  const [alertNeutered, setAlertNeutered] = useState("");
+  const [alertKeywords, setAlertKeywords] = useState("");
+  const [editingAlertId, setEditingAlertId] = useState<number | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const fetchAnimals = useCallback(
@@ -116,6 +159,31 @@ export function SearchExperience() {
   );
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = localStorage.getItem(SUBSCRIBER_KEY_STORAGE);
+    let cancelled = false;
+    if (!key) {
+      queueMicrotask(() => {
+        if (!cancelled) setSavedAlerts([]);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    void fetch(`/api/alerts?subscriberKey=${encodeURIComponent(key)}`)
+      .then((r) => r.json())
+      .then((d: { alerts?: SavedAlertRow[] }) => {
+        if (!cancelled) setSavedAlerts(d.alerts ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSavedAlerts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [alertListTick]);
+
+  useEffect(() => {
     // 최초 진입 시 서버 검색 API와 화면 상태를 동기화한다.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchAnimals(1, defaultSearch);
@@ -137,12 +205,67 @@ export function SearchExperience() {
     return () => observer.disconnect();
   }, [fetchAnimals, hasMore, isLoading, page]);
 
+  function resetAlertForm() {
+    setEditingAlertId(null);
+    setAlertLabel("");
+    setAlertCategory("");
+    setAlertBreed("");
+    setAlertRegion("");
+    setAlertGender("");
+    setAlertNeutered("");
+    setAlertKeywords("");
+  }
+
+  function beginEdit(a: SavedAlertRow) {
+    setEditingAlertId(a.id);
+    setAlertLabel(a.label ?? "");
+    setAlertCategory(a.category ?? "");
+    setAlertBreed(a.breed ?? "");
+    setAlertRegion(a.region ?? "");
+    setAlertGender(a.gender ?? "");
+    setAlertNeutered(a.neutered ?? "");
+    setAlertKeywords(a.featureKeywords ?? "");
+  }
+
+  async function deleteAlert(id: number) {
+    if (!window.confirm("이 알림 조건을 삭제할까요?")) {
+      return;
+    }
+    const subscriberKey = readOrCreateSubscriberKey();
+    if (!subscriberKey) {
+      setAlertMessage("구독 ID를 확인할 수 없습니다.");
+      return;
+    }
+    try {
+      const response = await fetch(`/api/alerts/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscriberKey })
+      });
+      const data = (await response.json()) as { message?: string };
+      if (!response.ok) {
+        setAlertMessage(data.message ?? "삭제에 실패했습니다.");
+        return;
+      }
+      if (editingAlertId === id) {
+        resetAlertForm();
+      }
+      setAlertMessage("알림 조건을 삭제했습니다.");
+      setAlertListTick((t) => t + 1);
+    } catch {
+      setAlertMessage("삭제 요청 중 오류가 발생했습니다.");
+    }
+  }
+
   function updateSearch(key: keyof SearchState, value: string | boolean) {
     setSearch((current) => {
       const next = { ...current, [key]: value };
       if (key === "useDefaultPeriod" && value === true) {
         next.from = toDateInputValue(monthsAgo(3));
         next.to = toDateInputValue(new Date());
+      }
+      if (key === "category") {
+        next.breed = "";
       }
       return next;
     });
@@ -155,7 +278,6 @@ export function SearchExperience() {
 
   async function onAlertSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
 
     const subscriberKey = readOrCreateSubscriberKey();
 
@@ -166,20 +288,26 @@ export function SearchExperience() {
 
     setAlertMessage("알림 조건을 저장하는 중입니다.");
 
-    const response = await fetch("/api/alerts", {
-      method: "POST",
+    const body = {
+      subscriberKey,
+      alertLabel: alertLabel.trim() || undefined,
+      category: alertCategory || undefined,
+      breed: alertBreed || undefined,
+      region: alertRegion || undefined,
+      gender: alertGender || undefined,
+      neutered: alertNeutered || undefined,
+      featureKeywords: alertKeywords.trim() || undefined
+    };
+
+    const url = editingAlertId ? `/api/alerts/${editingAlertId}` : "/api/alerts";
+    const method = editingAlertId ? "PATCH" : "POST";
+
+    const response = await fetch(url, {
+      method,
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        subscriberKey,
-        displayName: formData.get("displayName"),
-        breed: formData.get("breed"),
-        region: formData.get("region"),
-        gender: formData.get("gender"),
-        neutered: formData.get("neutered"),
-        featureKeywords: formData.get("featureKeywords")
-      })
+      body: JSON.stringify(body)
     });
 
     const data = (await response.json()) as {
@@ -207,7 +335,11 @@ export function SearchExperience() {
       extra = ` Discord 전송 실패: ${discord.error}`;
     }
 
-    setAlertMessage(`알림 조건을 저장했습니다. 현재 ${matchCount}건이 70점 이상으로 매칭되었습니다.${extra}`);
+    setAlertMessage(
+      `${editingAlertId ? "알림 조건을 수정했습니다." : "알림 조건을 추가했습니다."} 현재 ${matchCount}건이 70점 이상으로 매칭되었습니다.${extra}`
+    );
+    resetAlertForm();
+    setAlertListTick((t) => t + 1);
   }
 
   async function runPawinhandCrawl() {
@@ -228,10 +360,10 @@ export function SearchExperience() {
         query?: {
           start_date: string;
           end_date: string;
-          city: string;
-          species: string;
+          cities?: string[];
+          species?: string[];
           limit: number;
-          maxPages: number;
+          maxPagesPerQuery?: number;
         };
       };
 
@@ -245,8 +377,10 @@ export function SearchExperience() {
         data.errors && data.errors.length > 0 ? ` (일부 오류 ${data.errors.length}건)` : "";
 
       if (data.source === "bridge" && data.query) {
+        const citiesN = data.query.cities?.length ?? 0;
+        const speciesStr = (data.query.species ?? []).join(", ");
         setCrawlInfo(
-          `브리지 동기화 완료: ${data.upserted ?? 0}건 DB 반영 / API ${data.itemCount ?? 0}건 (${data.pages ?? 0}페이지) · ${data.query.city} · ${data.query.start_date}–${data.query.end_date}${warn}`
+          `브리지 동기화: ${data.upserted ?? 0}건 DB 반영 / 수집 ${data.itemCount ?? 0}건 (${data.pages ?? 0}요청) · 시도 ${citiesN}곳 · 축종 ${speciesStr} · ${data.query.start_date}–${data.query.end_date}${warn}`
         );
       } else {
         setCrawlInfo(
@@ -276,9 +410,8 @@ export function SearchExperience() {
 
       <section className="panel crawl-panel" aria-label="포인핸드 데이터 동기화">
         <p>
-          <strong>포인핸드</strong> 앱이 쓰는 브리지 엔드포인트(
-          <code>/bridge/animals/condition</code>)로 목록 JSON을 받습니다. 성별·중성화·썸네일·공고 기간·보호소 정보 등이 예전 RSS
-          방식보다 풍부합니다.
+          브리지 동기화는 기본으로 <strong>17개 시·도</strong>와 축종 <strong>개·고양이·기타</strong>를 순회합니다. 환경 변수로
+          범위를 줄이거나 늘릴 수 있습니다.
         </p>
         <div className="crawl-actions">
           <button
@@ -352,6 +485,22 @@ export function SearchExperience() {
               {animalCategories.map((category) => (
                 <option key={category} value={category}>
                   {category}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            세부 품종
+            <select
+              disabled={!search.category}
+              value={search.breed}
+              onChange={(event) => updateSearch("breed", event.target.value)}
+            >
+              <option value="">전체</option>
+              {breedsForCategory(search.category).map((b) => (
+                <option key={b} value={b}>
+                  {b}
                 </option>
               ))}
             </select>
@@ -437,29 +586,106 @@ export function SearchExperience() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Alert</p>
-            <h2>실시간 알림 조건 저장</h2>
+            <h2>실시간 알림 조건</h2>
           </div>
         </div>
         <p className="alert-hint">
-          알림 요약은 서버에 설정된 <strong>Discord 웹훅</strong>으로 전송됩니다. 70점 이상 매칭이 있을 때만 채널에
-          메시지가 옵니다.
+          조건을 여러 개 저장할 수 있습니다. 각 규칙마다 <strong>알림 이름</strong>을 붙이면 Discord에서 구분하기 쉽습니다. 70점
+          이상 매칭이 있을 때만 웹훅으로 보내며, 동물마다 <strong>사진 썸네일</strong>이 붙습니다.
         </p>
-        <form className="search-form" onSubmit={onAlertSubmit}>
+
+        {savedAlerts.length > 0 ? (
+          <ul className="saved-alerts-list" aria-label="저장된 알림 목록">
+            {savedAlerts.map((a) => (
+              <li className="saved-alert-item" key={a.id}>
+                <div className="saved-alert-body">
+                  <strong>{a.label?.trim() || `알림 #${a.id}`}</strong>
+                  <span className="saved-alerts-meta">
+                    {[a.category, a.breed || "품종 전체", a.region || "지역 전체"].filter(Boolean).join(" · ")} ·{" "}
+                    {formatKoreanDate(a.createdAt)}
+                  </span>
+                </div>
+                <div className="saved-alert-actions">
+                  <button className="alert-row-btn" type="button" onClick={() => beginEdit(a)}>
+                    수정
+                  </button>
+                  <button
+                    className="alert-row-btn danger"
+                    type="button"
+                    onClick={() => void deleteAlert(a.id)}
+                  >
+                    삭제
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <form className="search-form alert-form" onSubmit={onAlertSubmit}>
+          {editingAlertId ? (
+            <p className="alert-editing-banner">
+              알림 #{editingAlertId} 수정 중 —{" "}
+              <button className="link-like" type="button" onClick={() => resetAlertForm()}>
+                취소
+              </button>
+            </p>
+          ) : null}
           <label className="wide">
-            표시 이름 <span className="optional">(선택)</span>
-            <input name="displayName" placeholder="예: 우리집 댕댕이 찾기" type="text" />
+            알림 이름 <span className="optional">(이 규칙 구분용)</span>
+            <input
+              placeholder="예: 우리 집 말티즈"
+              type="text"
+              value={alertLabel}
+              onChange={(e) => setAlertLabel(e.target.value)}
+            />
           </label>
           <label>
-            품종
-            <input name="breed" placeholder="예: 푸들" />
+            품종 카테고리
+            <select
+              value={alertCategory}
+              onChange={(event) => {
+                setAlertCategory(event.target.value);
+                setAlertBreed("");
+              }}
+            >
+              <option value="">전체</option>
+              {animalCategories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            세부 품종
+            <select
+              disabled={!alertCategory}
+              value={alertBreed}
+              onChange={(event) => setAlertBreed(event.target.value)}
+            >
+              <option value="">전체</option>
+              {breedsForCategory(alertCategory).map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             지역
-            <input name="region" placeholder="예: 서울" />
+            <select value={alertRegion} onChange={(e) => setAlertRegion(e.target.value)}>
+              <option value="">전체</option>
+              {regions.map((region) => (
+                <option key={region} value={region}>
+                  {region}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             성별
-            <select name="gender" defaultValue="">
+            <select value={alertGender} onChange={(e) => setAlertGender(e.target.value)}>
               <option value="">전체</option>
               {animalGenders.map((gender) => (
                 <option key={gender} value={gender}>
@@ -470,7 +696,7 @@ export function SearchExperience() {
           </label>
           <label>
             중성화
-            <select name="neutered" defaultValue="">
+            <select value={alertNeutered} onChange={(e) => setAlertNeutered(e.target.value)}>
               <option value="">전체</option>
               {neuteredOptions.map((option) => (
                 <option key={option} value={option}>
@@ -481,9 +707,15 @@ export function SearchExperience() {
           </label>
           <label className="wide">
             특징
-            <input name="featureKeywords" placeholder="예: 갈색 빨간목줄" />
+            <input
+              placeholder="예: 갈색 빨간목줄"
+              value={alertKeywords}
+              onChange={(e) => setAlertKeywords(e.target.value)}
+            />
           </label>
-          <button type="submit">알림 저장</button>
+          <div className="alert-form-actions">
+            <button type="submit">{editingAlertId ? "조건 저장" : "이 조건 알림 추가"}</button>
+          </div>
         </form>
         {alertMessage ? <p className="notice">{alertMessage}</p> : null}
       </section>

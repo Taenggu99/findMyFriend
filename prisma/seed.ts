@@ -110,6 +110,8 @@ async function main() {
       password: null,
       alerts: {
         create: {
+          label: "데모: 서울 푸들",
+          category: "개",
           breed: "푸들",
           region: "서울특별시",
           gender: "암컷",

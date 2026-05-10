@@ -63,6 +63,8 @@ model UserAlert {
   id              Int      @id @default(autoincrement())
   userId          Int      @map("user_id")
   user            User     @relation(fields: [userId], references: [id])
+  label           String?
+  category        String?
   breed           String?
   region          String?
   gender          String?

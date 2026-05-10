@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
   const to = parseDate(getSearchValue(request, "to"), now);
   const region = getSearchValue(request, "region");
   const category = getSearchValue(request, "category");
+  const breed = getSearchValue(request, "breed");
   const gender = getSearchValue(request, "gender");
   const neutered = getSearchValue(request, "neutered");
   const keywords = splitKeywords(getSearchValue(request, "keywords"));
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
     },
     ...(region ? { foundRegion: { contains: region } } : {}),
     ...(category ? { category } : {}),
+    ...(breed ? { breed: { contains: breed } } : {}),
     ...(gender ? { gender } : {}),
     ...(neutered ? { neutered } : {}),
     ...(keywords.length > 0

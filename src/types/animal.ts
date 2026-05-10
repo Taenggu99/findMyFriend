@@ -13,6 +13,7 @@ export type AnimalSearchParams = {
   to?: string;
   region?: string;
   category?: string;
+  breed?: string;
   gender?: string;
   neutered?: string;
   keywords?: string;

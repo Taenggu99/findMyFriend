@@ -671,6 +671,87 @@ button {
   font-size: 0.85em;
 }
 
+.saved-alerts-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.saved-alerts-list li {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fffdf9;
+  display: grid;
+  gap: 4px;
+}
+
+.saved-alert-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.saved-alert-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.saved-alert-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+button.alert-row-btn {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+button.alert-row-btn.danger {
+  border-color: rgba(180, 60, 50, 0.35);
+  color: #a53c32;
+}
+
+.alert-editing-banner {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+button.link-like {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--brand);
+  text-decoration: underline;
+  font: inherit;
+}
+
+.alert-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.saved-alerts-meta {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
 .alert-form {
   display: grid;
   gap: 14px;

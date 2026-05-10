@@ -3,6 +3,8 @@ type DiscordEmbed = {
   description?: string;
   color?: number;
   fields?: { name: string; value: string; inline?: boolean }[];
+  thumbnail?: { url: string };
+  image?: { url: string };
 };
 
 export type DiscordWebhookBody = {
@@ -88,5 +90,67 @@ export function buildMatchAlertDiscordBody(options: {
         color: 0x5865f2
       }
     ]
+  };
+}
+
+export type DiscordMatchAnimalLine = {
+  noticeNo: string;
+  breed: string;
+  category: string;
+  gender: string;
+  neutered: string;
+  foundDateLabel: string;
+  foundRegion: string;
+  imageUrl: string;
+  detailLine: string;
+};
+
+function isHttpImageUrl(url: string): boolean {
+  return url.startsWith("https://") || url.startsWith("http://");
+}
+
+/** 중성화 표기: O → o, X → x (Discord 미리보기용) */
+function formatNeuteredLine(n: string): string {
+  if (n === "O") return "o";
+  if (n === "X") return "x";
+  return n;
+}
+
+/** 헤더 1개 + 동물당 임베드(제목 없음·썸네일). Discord 최대 10개 임베드. */
+export function buildMatchAlertDiscordEmbeds(options: {
+  displayLabel: string;
+  matches: DiscordMatchAnimalLine[];
+}): DiscordWebhookBody {
+  const header: DiscordEmbed = {
+    title: "findMyFriend · 알림 매칭",
+    description: truncate(
+      `**${options.displayLabel}**\n70점 이상 **${options.matches.length}**건`,
+      350
+    ),
+    color: 0x5865f2
+  };
+
+  const animalEmbeds: DiscordEmbed[] = options.matches.slice(0, 9).map((m) => {
+    const photo = isHttpImageUrl(m.imageUrl) ? { url: m.imageUrl } : undefined;
+    const desc = [
+      `**[${m.category}] ${m.breed}**`,
+      `성별 ${m.gender} / 중성화 ${formatNeuteredLine(m.neutered)}`,
+      `발견날짜 · ${m.foundDateLabel}`,
+      `발견지역 · ${m.foundRegion}`,
+      `공고번호 ${m.noticeNo}`,
+      m.detailLine ? `링크 · ${m.detailLine}` : ""
+    ]
+      .filter((line) => line !== "")
+      .join("\n");
+
+    return {
+      description: truncate(desc, 1800),
+      color: 0x57f287,
+      thumbnail: photo
+    };
+  });
+
+  return {
+    embeds: [header, ...animalEmbeds]
   };
 }
