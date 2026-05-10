@@ -1,13 +1,26 @@
+/**
+ * 알림 조건 저장·매칭 API. 매칭이 있으면 Discord Incoming Webhook으로 요약 전송.
+ * 환경 변수: DISCORD_WEBHOOK_URL (필수로 보내려면), 선택 DISCORD_WEBHOOK_USERNAME, DISCORD_WEBHOOK_AVATAR_URL
+ */
 import { NextRequest, NextResponse } from "next/server";
 
 import { serializeAnimal } from "@/lib/animal-serializer";
+import {
+  buildMatchAlertDiscordBody,
+  normalizeWebhookAvatarUrl,
+  normalizeWebhookUsername,
+  postDiscordWebhook
+} from "@/lib/discord-webhook";
 import { prisma } from "@/lib/db";
 import { calculateMatchScore } from "@/lib/similarity";
 
 export const dynamic = "force-dynamic";
 
 type AlertPayload = {
-  email?: string;
+  /** 브라우저에 저장된 고유 구독 키(UUID 등) */
+  subscriberKey?: string;
+  /** Discord 메시지에 표시할 이름(선택) */
+  displayName?: string;
   breed?: string;
   region?: string;
   gender?: string;
@@ -25,7 +38,8 @@ export async function GET() {
     include: {
       user: {
         select: {
-          email: true
+          subscriberKey: true,
+          displayName: true
         }
       }
     },
@@ -39,17 +53,23 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const payload = (await request.json()) as AlertPayload;
-  const email = clean(payload.email);
+  const subscriberKey = clean(payload.subscriberKey);
 
-  if (!email) {
-    return NextResponse.json({ message: "이메일을 입력해 주세요." }, { status: 400 });
+  if (!subscriberKey) {
+    return NextResponse.json(
+      { message: "구독 식별 정보가 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요." },
+      { status: 400 }
+    );
   }
 
   const user = await prisma.user.upsert({
-    where: { email },
-    update: {},
+    where: { subscriberKey },
+    update: {
+      displayName: clean(payload.displayName)
+    },
     create: {
-      email,
+      subscriberKey,
+      displayName: clean(payload.displayName),
       password: null
     }
   });
@@ -111,13 +131,51 @@ export async function POST(request: NextRequest) {
     )
   );
 
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL?.trim();
+  const displayLabel = user.displayName?.trim() || `구독자 (${subscriberKey.slice(0, 8)}…)`;
+
+  let discord: { sent: boolean; skippedReason?: string; error?: string } = { sent: false };
+
+  if (!webhookUrl) {
+    discord = { sent: false, skippedReason: "DISCORD_WEBHOOK_URL 미설정" };
+  } else if (matches.length === 0) {
+    discord = { sent: false, skippedReason: "70점 이상 매칭 없음" };
+  } else {
+    const appBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ?? "";
+    const matchLines = matches.slice(0, 20).map((m, i) => {
+      const no = m.animal.noticeNo;
+      const line = `${i + 1}. **${no}** · ${m.animal.breed} · ${m.animal.foundRegion} · ${m.score}점`;
+      if (appBase) {
+        return `${line}\n   ${appBase}/animal/${m.animal.id}`;
+      }
+      return `${line}\n   ${m.animal.detailUrl}`;
+    });
+
+    const body = buildMatchAlertDiscordBody({ displayLabel, matchLines });
+    const username = normalizeWebhookUsername(process.env.DISCORD_WEBHOOK_USERNAME);
+    const avatarUrl = normalizeWebhookAvatarUrl(process.env.DISCORD_WEBHOOK_AVATAR_URL);
+
+    const posted = await postDiscordWebhook(webhookUrl, {
+      ...body,
+      username,
+      avatar_url: avatarUrl
+    });
+
+    if (posted.ok) {
+      discord = { sent: true };
+    } else {
+      discord = { sent: false, error: posted.error };
+    }
+  }
+
   return NextResponse.json(
     {
       alert,
       matches: matches.map((match) => ({
         animal: serializeAnimal(match.animal),
         score: match.score
-      }))
+      })),
+      discord
     },
     { status: 201 }
   );

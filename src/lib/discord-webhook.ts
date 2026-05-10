@@ -1,0 +1,92 @@
+type DiscordEmbed = {
+  title?: string;
+  description?: string;
+  color?: number;
+  fields?: { name: string; value: string; inline?: boolean }[];
+};
+
+export type DiscordWebhookBody = {
+  username?: string;
+  avatar_url?: string;
+  content?: string;
+  embeds?: DiscordEmbed[];
+};
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}…`;
+}
+
+/**
+ * Discord 웹훅 `avatar_url`은 http(s)만 허용.
+ * .env에 `...AVATAR_URL=https://...` 전체가 값으로 붙은 경우 등은 https:// 이후만 추출한다.
+ */
+export function normalizeWebhookAvatarUrl(raw: string | undefined): string | undefined {
+  let s = raw?.trim();
+  if (!s) return undefined;
+
+  const lower = s.toLowerCase();
+  const keyNoise = "discord_webhook_avatar_url=";
+  if (lower.includes(keyNoise)) {
+    const idx = lower.indexOf(keyNoise);
+    s = s.slice(idx + keyNoise.length).trim();
+  }
+
+  const fromHttp = s.match(/https?:\/\/[^\s"'<>]+/i)?.[0];
+  const candidate = fromHttp ?? s;
+
+  try {
+    const u = new URL(candidate);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+    return u.href;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Discord 웹훅 username은 최대 80자 */
+export function normalizeWebhookUsername(raw: string | undefined): string | undefined {
+  const s = raw?.trim().replace(/\s+/g, " ");
+  if (!s) return undefined;
+  return s.length > 80 ? s.slice(0, 80) : s;
+}
+
+export async function postDiscordWebhook(
+  webhookUrl: string,
+  body: DiscordWebhookBody
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      return { ok: false, error: `HTTP ${response.status}: ${truncate(text, 180)}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export function buildMatchAlertDiscordBody(options: {
+  displayLabel: string;
+  matchLines: string[];
+}): DiscordWebhookBody {
+  const description =
+    options.matchLines.length > 0
+      ? truncate(options.matchLines.join("\n"), 3800)
+      : "매칭된 공고가 없습니다.";
+
+  return {
+    embeds: [
+      {
+        title: "findMyFriend · 알림 매칭",
+        description: `**${truncate(options.displayLabel, 80)}**\n\n${description}`,
+        color: 0x5865f2
+      }
+    ]
+  };
+}

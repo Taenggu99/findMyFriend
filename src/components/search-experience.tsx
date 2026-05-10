@@ -31,6 +31,21 @@ type AnimalResponse = {
 
 const regions = ["서울특별시", "경기도", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시", "울산광역시", "제주특별자치도"];
 const limit = 9;
+const SUBSCRIBER_KEY_STORAGE = "findmyfriend_subscriber_key";
+
+function readOrCreateSubscriberKey(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    let key = localStorage.getItem(SUBSCRIBER_KEY_STORAGE);
+    if (!key) {
+      key = crypto.randomUUID();
+      localStorage.setItem(SUBSCRIBER_KEY_STORAGE, key);
+    }
+    return key;
+  } catch {
+    return "";
+  }
+}
 
 function buildQuery(search: SearchState, page: number) {
   const params = new URLSearchParams();
@@ -71,6 +86,8 @@ export function SearchExperience() {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
+  const [crawlLoading, setCrawlLoading] = useState(false);
+  const [crawlInfo, setCrawlInfo] = useState("");
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const fetchAnimals = useCallback(
@@ -140,6 +157,13 @@ export function SearchExperience() {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
 
+    const subscriberKey = readOrCreateSubscriberKey();
+
+    if (!subscriberKey) {
+      setAlertMessage("이 브라우저에서 구독 ID를 만들 수 없습니다. 쿠키/저장소를 허용했는지 확인해 주세요.");
+      return;
+    }
+
     setAlertMessage("알림 조건을 저장하는 중입니다.");
 
     const response = await fetch("/api/alerts", {
@@ -148,7 +172,8 @@ export function SearchExperience() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        email: formData.get("email"),
+        subscriberKey,
+        displayName: formData.get("displayName"),
         breed: formData.get("breed"),
         region: formData.get("region"),
         gender: formData.get("gender"),
@@ -157,13 +182,83 @@ export function SearchExperience() {
       })
     });
 
-    const data = await response.json();
+    const data = (await response.json()) as {
+      message?: string;
+      matches?: unknown[];
+      discord?: { sent: boolean; skippedReason?: string; error?: string };
+    };
+
     if (!response.ok) {
       setAlertMessage(data.message ?? "알림 조건 저장에 실패했습니다.");
       return;
     }
 
-    setAlertMessage(`알림 조건을 저장했습니다. 현재 ${data.matches.length}건이 70점 이상으로 매칭되었습니다.`);
+    const matchCount = data.matches?.length ?? 0;
+    const discord = data.discord;
+
+    let extra = "";
+    if (discord?.sent) {
+      extra = ` Discord 채널로 매칭 ${matchCount}건 요약을 보냈습니다.`;
+    } else if (discord?.skippedReason === "DISCORD_WEBHOOK_URL 미설정") {
+      extra = " (서버에 DISCORD_WEBHOOK_URL이 없어 Discord로는 보내지 않았습니다.)";
+    } else if (discord?.skippedReason === "70점 이상 매칭 없음") {
+      extra = " (70점 이상 매칭이 없어 Discord 메시지는 생략했습니다.)";
+    } else if (discord?.error) {
+      extra = ` Discord 전송 실패: ${discord.error}`;
+    }
+
+    setAlertMessage(`알림 조건을 저장했습니다. 현재 ${matchCount}건이 70점 이상으로 매칭되었습니다.${extra}`);
+  }
+
+  async function runPawinhandCrawl() {
+    setCrawlLoading(true);
+    setCrawlInfo("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/crawl/pawinhand", { method: "POST" });
+      const data = (await response.json()) as {
+        ok?: boolean;
+        source?: string;
+        error?: string;
+        upserted?: number;
+        itemCount?: number;
+        pages?: number;
+        lastBuildDate?: string | null;
+        errors?: string[];
+        query?: {
+          start_date: string;
+          end_date: string;
+          city: string;
+          species: string;
+          limit: number;
+          maxPages: number;
+        };
+      };
+
+      if (!response.ok || data.error) {
+        setCrawlInfo("");
+        setMessage(data.error ?? "포인핸드 동기화에 실패했습니다.");
+        return;
+      }
+
+      const warn =
+        data.errors && data.errors.length > 0 ? ` (일부 오류 ${data.errors.length}건)` : "";
+
+      if (data.source === "bridge" && data.query) {
+        setCrawlInfo(
+          `브리지 동기화 완료: ${data.upserted ?? 0}건 DB 반영 / API ${data.itemCount ?? 0}건 (${data.pages ?? 0}페이지) · ${data.query.city} · ${data.query.start_date}–${data.query.end_date}${warn}`
+        );
+      } else {
+        setCrawlInfo(
+          `동기화 완료: ${data.upserted ?? 0}건 반영 / ${data.itemCount ?? 0}건 · lastBuild ${data.lastBuildDate ?? "-"}${warn}`
+        );
+      }
+      await fetchAnimals(1);
+    } catch {
+      setMessage("포인핸드 동기화 요청 중 오류가 발생했습니다.");
+    } finally {
+      setCrawlLoading(false);
+    }
   }
 
   return (
@@ -172,9 +267,32 @@ export function SearchExperience() {
         <p className="eyebrow">통합 보호 동물 탐색</p>
         <h1>잃어버린 반려동물과 닮은 공고를 한 번에 찾아보세요.</h1>
         <p>
-          포인핸드 등 보호소 공고를 수집하고, 지역/품종/특징 키워드로 검색하며, 조건에 맞는 신규 공고를 알림으로 받을 수 있습니다.
+          검색은 <strong>로컬 DB</strong>만 조회합니다. 포인핸드 공고는 아래 버튼으로{" "}
+          <code>pawinhand.net</code> 브리지 JSON API를 호출해 DB에 반영하세요. 수집 범위는 환경 변수(
+          <code>PAWINHAND_BRIDGE_*</code>)로 바꿀 수 있으며, 앱에는 <strong>자동 주기 스케줄은 없습니다</strong>{" "}
+          (원하면 호스팅 Cron으로 같은 API를 주기 호출).
         </p>
       </section>
+
+      <section className="panel crawl-panel" aria-label="포인핸드 데이터 동기화">
+        <p>
+          <strong>포인핸드</strong> 앱이 쓰는 브리지 엔드포인트(
+          <code>/bridge/animals/condition</code>)로 목록 JSON을 받습니다. 성별·중성화·썸네일·공고 기간·보호소 정보 등이 예전 RSS
+          방식보다 풍부합니다.
+        </p>
+        <div className="crawl-actions">
+          <button
+            className="crawl-button"
+            disabled={crawlLoading}
+            type="button"
+            onClick={() => void runPawinhandCrawl()}
+          >
+            {crawlLoading ? "가져오는 중…" : "포인핸드 브리지 동기화"}
+          </button>
+        </div>
+      </section>
+
+      {crawlInfo ? <p className="notice">{crawlInfo}</p> : null}
 
       <section className="panel">
         <div className="section-heading">
@@ -322,10 +440,14 @@ export function SearchExperience() {
             <h2>실시간 알림 조건 저장</h2>
           </div>
         </div>
+        <p className="alert-hint">
+          알림 요약은 서버에 설정된 <strong>Discord 웹훅</strong>으로 전송됩니다. 70점 이상 매칭이 있을 때만 채널에
+          메시지가 옵니다.
+        </p>
         <form className="search-form" onSubmit={onAlertSubmit}>
           <label className="wide">
-            이메일
-            <input name="email" placeholder="me@example.com" required type="email" />
+            표시 이름 <span className="optional">(선택)</span>
+            <input name="displayName" placeholder="예: 우리집 댕댕이 찾기" type="text" />
           </label>
           <label>
             품종

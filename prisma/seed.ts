@@ -102,10 +102,11 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { email: "demo@findmyfriend.local" },
+    where: { subscriberKey: "demo-subscriber-local" },
     update: {},
     create: {
-      email: "demo@findmyfriend.local",
+      subscriberKey: "demo-subscriber-local",
+      displayName: "데모 사용자",
       password: null,
       alerts: {
         create: {

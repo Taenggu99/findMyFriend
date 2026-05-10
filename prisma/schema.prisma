@@ -47,12 +47,14 @@ model Shelter {
 }
 
 model User {
-  id        Int         @id @default(autoincrement())
-  email     String      @unique
-  password  String?
-  alerts    UserAlert[]
-  alertLogs AlertLog[]
-  createdAt DateTime    @default(now()) @map("created_at")
+  id            Int         @id @default(autoincrement())
+  /** 물리 컬럼명은 기존 `email` (마이그레이션 호환). 값은 UUID 등 구독 식별자만 저장합니다. */
+  subscriberKey String      @unique @map("email")
+  displayName   String?     @map("display_name")
+  password      String?
+  alerts        UserAlert[]
+  alertLogs     AlertLog[]
+  createdAt     DateTime    @default(now()) @map("created_at")
 
   @@map("users")
 }
