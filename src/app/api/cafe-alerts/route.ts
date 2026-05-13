@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { GUPPI_LOVE_BOARDS } from "@/lib/naver-cafe/boards";
+import { cleanSubscriberOrLabel, normalizeCafeAlertWrite } from "@/lib/naver-cafe/cafe-alert-normalize";
+import { countCafeMatchesForAlert } from "@/lib/naver-cafe/count-cafe-alert-matches";
 
 export const dynamic = "force-dynamic";
-
-const BOARD_KEYS = new Set(GUPPI_LOVE_BOARDS.map((b) => b.key));
 
 type CafeUserAlertRow = {
   id: number;
@@ -45,11 +44,6 @@ function serialize(a: CafeUserAlertRow) {
     keywordPhrases,
     createdAt: a.createdAt.toISOString()
   };
-}
-
-function clean(value?: string | null) {
-  const t = value?.trim();
-  return t ? t : null;
 }
 
 type PostBody = {
@@ -97,7 +91,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const subscriberKey = clean(body.subscriberKey);
+    const subscriberKey = cleanSubscriberOrLabel(body.subscriberKey);
     if (!subscriberKey) {
       return NextResponse.json(
         { message: "구독 식별 정보가 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요." },
@@ -105,27 +99,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rawBoards = Array.isArray(body.boardKeys) ? body.boardKeys : [];
-    const boardKeys = rawBoards.filter((k) => typeof k === "string" && BOARD_KEYS.has(k));
-    const keysToSave =
-      boardKeys.length > 0 ? boardKeys : GUPPI_LOVE_BOARDS.map((b) => b.key);
-
-    const listingKindRaw = clean(body.listingKind) ?? "any";
-    const listingKind = ["any", "sharing", "trade"].includes(listingKindRaw) ? listingKindRaw : "any";
-
-    const regions = Array.isArray(body.regions)
-      ? body.regions.filter((r): r is string => typeof r === "string" && r.trim().length > 0)
-      : [];
-
-    const keywordPhrases = Array.isArray(body.keywordPhrases)
-      ? body.keywordPhrases
-          .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
-          .map((k) => k.trim())
-      : [];
-
-    if (keywordPhrases.length === 0) {
-      return NextResponse.json({ message: "keywordPhrases가 비어 있습니다." }, { status: 400 });
+    const norm = normalizeCafeAlertWrite(body);
+    if (!norm.ok) {
+      return NextResponse.json({ message: norm.message }, { status: 400 });
     }
+
+    const { keysToSave, listingKind, regions, keywordPhrases, label } = norm.data;
 
     const user = await prisma.user.upsert({
       where: { subscriberKey },
@@ -136,7 +115,7 @@ export async function POST(request: NextRequest) {
     const alert = await prisma.cafeUserAlert.create({
       data: {
         userId: user.id,
-        label: clean(body.label),
+        label,
         boardKeysJson: JSON.stringify(keysToSave),
         listingKind,
         regionsJson: JSON.stringify(regions),
@@ -144,7 +123,8 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ alert: serialize(alert) }, { status: 201 });
+    const matchCount = await countCafeMatchesForAlert(prisma, alert);
+    return NextResponse.json({ alert: serialize(alert), matchCount }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ message }, { status: 500 });
