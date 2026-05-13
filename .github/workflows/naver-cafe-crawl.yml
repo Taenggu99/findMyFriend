@@ -1,0 +1,89 @@
+# 구피사랑 카페 크롤 — 6시간마다 + 수동 실행
+#
+# 기본 추천: CAFE_CRAWL_POST_URL 시크릿을 만들지 않으면 → B) 러너에서 npm run cafe:crawl
+# 나중에 배포 URL이 안정되면: CAFE_CRAWL_POST_URL 설정 → A) curl만
+#
+# 시크릿·변수는 README「GitHub Actions — 네이버 카페 크롤」참고
+
+name: Naver cafe crawl
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: naver-cafe-crawl-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Trigger remote crawl API
+        if: ${{ secrets.CAFE_CRAWL_POST_URL != '' }}
+        env:
+          URL: ${{ secrets.CAFE_CRAWL_POST_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -e
+          if [ -n "${CRON_SECRET:-}" ]; then
+            curl -fsS -X POST "$URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -d '{}'
+          else
+            curl -fsS -X POST "$URL" \
+              -H "Content-Type: application/json" \
+              -d '{}'
+          fi
+          echo "Remote crawl POST ok"
+
+      - uses: actions/checkout@v4
+        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+
+      - uses: actions/setup-node@v4
+        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        run: PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps chromium
+
+      - name: Write naver session from secret
+        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        env:
+          NAVER_CAFE_SESSION_JSON: ${{ secrets.NAVER_CAFE_SESSION_JSON }}
+        run: |
+          set -e
+          if [ -z "${NAVER_CAFE_SESSION_JSON:-}" ]; then
+            echo "Either set CAFE_CRAWL_POST_URL (remote crawl) or NAVER_CAFE_SESSION_JSON (runner crawl)."
+            exit 1
+          fi
+          mkdir -p storage
+          node -e "require('fs').writeFileSync('storage/naver-session.json', process.env.NAVER_CAFE_SESSION_JSON)"
+
+      - name: Run cafe crawl CLI
+        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_CAFE_WEBHOOK_URL: ${{ secrets.DISCORD_CAFE_WEBHOOK_URL }}
+          NAVER_CAFE_DEBUG: "1"
+          NAVER_CAFE_CRAWL_MAX_LIST: ${{ vars.NAVER_CAFE_CRAWL_MAX_LIST }}
+          NAVER_CAFE_CRAWL_MAX_DETAILS: ${{ vars.NAVER_CAFE_CRAWL_MAX_DETAILS }}
+        run: |
+          set -e
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "DATABASE_URL secret is required when running crawl on the runner."
+            exit 1
+          fi
+          PLAYWRIGHT_BROWSERS_PATH=0 npm run cafe:crawl

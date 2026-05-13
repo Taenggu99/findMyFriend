@@ -55,9 +55,11 @@ npm run db:generate
 npm run db:push
 npm run db:seed
 npm run crawler:pawinhand
+npm run naver-cafe:login
+npm run cafe:crawl
 ```
 
-`crawler:pawinhand`는 브리지 API를 호출해 DB에 반영합니다. **Chromium 설치가 필수는 아닙니다.**
+`npm run cafe:crawl`은 **구피사랑 카페** 크롤을 CLI로 돌립니다(Playwright·`storage/naver-session.json` 필요). GitHub Actions 러너 모드에서도 동일 스크립트를 사용합니다.
 
 ## 프로젝트 구조
 
@@ -130,6 +132,63 @@ prisma/
 | `NEXT_PUBLIC_APP_URL` | 선택 | 예: `http://localhost:3000` 또는 배포 도메인. 넣으면 Discord 본문에 `/animal/[id]` 링크가 포함됩니다. 비우면 공고 `detailUrl`만 표시합니다. |
 
 봇 토큰이나 서버 ID는 **웹훅만 쓰는 방식**에서는 필요 없습니다.
+
+## GitHub Actions — 네이버 카페 크롤 (6시간마다)
+
+워크플로: [`.github/workflows/naver-cafe-crawl.yml`](.github/workflows/naver-cafe-crawl.yml)  
+UTC 기준 **6시간마다** 실행되며, **Actions 탭에서 수동 실행(`workflow_dispatch`)** 도 가능합니다.
+
+### 추천: 지금은 **B (러너에서 크롤)**
+
+베르셀에 Playwright·SQLite·세션까지 맞추기 전에도 동작하기 쉽습니다.
+
+1. GitHub → 저장소 **Settings → Secrets and variables → Actions**  
+2. **`CAFE_CRAWL_POST_URL` 시크릿은 만들지 않습니다.** (없으면 자동으로 B로 갑니다.)  
+3. 아래 시크릿만 등록합니다.
+
+| Secret | 필수 | Secret 칸에 넣는 값 |
+| --- | --- | --- |
+| `NAVER_CAFE_SESSION_JSON` | **필수** | 로컬 `storage/naver-session.json` 파일 **전체** (`npm run naver-cafe:login` 후 복사). 레포에 커밋 금지. |
+| `DATABASE_URL` | **필수** | 앱이 쓰는 DB와 **같은** 연결 문자열 권장. 예: Turso/Neon URL 또는 로컬과 동일하게 쓸 `file:./dev.db`는 **러너마다 새 파일**이라 알림 DB가 비어 Discord가 안 나갈 수 있음. |
+| `DISCORD_WEBHOOK_URL` | 선택 | 카페·동물 알림용 웹훅 URL 한 줄. |
+| `DISCORD_CAFE_WEBHOOK_URL` | 선택 | 카페만 다른 웹훅이면 여기에. |
+
+4. (선택) **Variables** 탭에 `NAVER_CAFE_CRAWL_MAX_LIST`, `NAVER_CAFE_CRAWL_MAX_DETAILS` 숫자 문자열.
+
+로컬에서만 시험: `npm run naver-cafe:login` 후 `npm run cafe:crawl` (`.env`의 `DATABASE_URL` 사용).
+
+### 나중에: **A (배포 URL만 curl)**
+
+베르셀(또는 다른 호스트)에서 `POST /api/crawl/naver-cafe`가 **안정적으로** 돌아가게 만든 뒤:
+
+1. Actions 시크릿 **`CAFE_CRAWL_POST_URL`** = `https://배포주소/api/crawl/naver-cafe` 전체  
+2. 서버에 `CRON_SECRET`을 썼다면 같은 값으로 **`CRON_SECRET`** 시크릿 추가  
+3. 이때는 러너 크롤보다 **GitHub 분·시간을 덜 씀**. (B용 시크릿은 그대로 두어도 되고, 정리하려면 `NAVER_CAFE_SESSION_JSON` 등은 삭제해도 됨.)
+
+### 동작 분기 (요약)
+
+| 조건 | 동작 |
+| --- | --- |
+| `CAFE_CRAWL_POST_URL` 시크릿이 **있고** 값이 있음 | **A** — 해당 URL로 `curl` POST만 |
+| `CAFE_CRAWL_POST_URL`이 **없음** | **B** — 러너에서 `npm run cafe:crawl` |
+
+### Repository variables (선택)
+
+| Variable | 설명 |
+| --- | --- |
+| `NAVER_CAFE_CRAWL_MAX_LIST` | 게시판당 목록 개수 상한 (숫자 문자열, 비우면 크롤러 기본값) |
+| `NAVER_CAFE_CRAWL_MAX_DETAILS` | 상세 수집 상한 (숫자 문자열, 비우면 크롤러 기본값) |
+
+### Secrets 요약 표
+
+| Secret | A (curl) | B (러너, **기본 추천**) |
+| --- | --- | --- |
+| `CAFE_CRAWL_POST_URL` | **필수** | **등록하지 않음** |
+| `CRON_SECRET` | 선택 | 불필요 |
+| `NAVER_CAFE_SESSION_JSON` | 불필요 | **필수** |
+| `DATABASE_URL` | 불필요 | **필수** |
+| `DISCORD_WEBHOOK_URL` | 불필요 (배포 서버 env) | 선택 |
+| `DISCORD_CAFE_WEBHOOK_URL` | 불필요 | 선택 |
 
 ## 유사도 점수
 
