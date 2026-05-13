@@ -1,22 +1,71 @@
+# ── Git / merge ──
+*.orig
+*.rej
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── 환경 변수(비밀·로컬) ──
 .env
-.env*.local
-.next
-node_modules
-dist
-coverage
+.env.*
+!.env.example
+
+# ── 의존성 ──
+node_modules/
+.pnp
+.pnp.js
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ── Next.js / React 빌드·캐시 ──
+.next/
+out/
+build/
+dist/
+.swc/
+
+# ── TypeScript ──
+*.tsbuildinfo
+
+# ── 테스트·커버리지 ──
+coverage/
+.nyc_output/
+
+# ── Playwright ──
+playwright-report/
+test-results/
+blob-report/
+
+# ── 로그·디버그 ──
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── 배포·도구 ──
+.vercel/
+.turbo/
+
+# ── 로컬 DB(SQLite 등) ──
 *.sqlite
 *.sqlite-journal
 dev.db
 prisma/dev.db
-playwright-report
-test-results
-.env*.local
-.env
-.next
-node_modules
-dist
-coverage
-*.tsbuildinfo
-prisma/dev.db
 prisma/dev.db-journal
+
+# ── IDE(원하면 팀 규칙에 맞게 조정) ──
+.idea/
+*.swp
+*.swo
+*~
+
+# Playwright 네이버 로그인 세션(쿠키 등) — 절대 커밋하지 마세요
+storage/
+**/naver-session.json

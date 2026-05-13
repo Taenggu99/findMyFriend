@@ -73,6 +73,8 @@ model User {
   password      String?
   alerts        UserAlert[]
   alertLogs     AlertLog[]
+  cafeAlerts    CafeUserAlert[]
+  cafeAlertLogs CafeAlertLog[]
   createdAt     DateTime    @default(now()) @map("created_at")
 
   @@map("users")
@@ -105,4 +107,62 @@ model AlertLog {
 
   @@unique([userId, animalId])
   @@map("alert_logs")
+}
+
+/** 네이버 카페(구피사랑 등)에서 수집한 게시글 — url 기준 중복 방지 */
+model CafeCrawledPost {
+  id               Int            @id @default(autoincrement())
+  url              String         @unique
+  title            String
+  boardKey         String         @map("board_key")
+  boardLabel       String         @map("board_label")
+  /** sharing | trade | unknown */
+  postKind         String         @map("post_kind")
+  /** 제목 앞 [지역] 등 */
+  titleRegion      String?        @map("title_region")
+  /** 분양글 앞 [판매중] 등 */
+  tradeStatus      String?        @map("trade_status")
+  thumbnailUrl     String?        @map("thumbnail_url")
+  contentSnippet   String?        @map("content_snippet")
+  postedAt         DateTime?      @map("posted_at")
+  firstSeenAt      DateTime       @default(now()) @map("first_seen_at")
+  cafeAlertLogs    CafeAlertLog[]
+
+  @@index([boardKey])
+  @@index([firstSeenAt])
+  @@map("cafe_crawled_posts")
+}
+
+/** 네이버 카페 분양/나눔 알림 조건 */
+model CafeUserAlert {
+  id                  Int      @id @default(autoincrement())
+  userId              Int      @map("user_id")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label               String?
+  /** JSON string[] — 감시할 게시판 키 */
+  boardKeysJson       String   @map("board_keys_json")
+  /** any | sharing | trade */
+  listingKind         String   @default("any") @map("listing_kind")
+  /** JSON string[] — 비우면 지역 무관 */
+  regionsJson         String   @map("regions_json")
+  /** JSON string[] — 각 문자열은 띄어쓰기로 토큰 분리 후 AND 매칭 */
+  keywordPhrasesJson  String   @map("keyword_phrases_json")
+  createdAt           DateTime @default(now()) @map("created_at")
+  cafeAlertLogs       CafeAlertLog[]
+
+  @@map("cafe_user_alerts")
+}
+
+model CafeAlertLog {
+  id        Int             @id @default(autoincrement())
+  userId    Int             @map("user_id")
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alertId   Int             @map("alert_id")
+  alert     CafeUserAlert   @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  postId    Int             @map("post_id")
+  post      CafeCrawledPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sentAt    DateTime        @default(now()) @map("sent_at")
+
+  @@unique([userId, postId])
+  @@map("cafe_alert_logs")
 }

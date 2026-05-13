@@ -103,7 +103,7 @@ export default async function AnimalDetailPage({ params }: PageProps) {
 
   return (
     <main>
-      <Link className="back-link" href="/">
+      <Link className="back-link" href="/protect">
         검색으로 돌아가기
       </Link>
 
@@ -189,7 +189,7 @@ export default async function AnimalDetailPage({ params }: PageProps) {
         </div>
         <div className="related-list">
           {animal.shelter.animals.length > 0 ? (
-            animal.shelter.animals.map((related) => (
+            animal.shelter.animals.map((related: (typeof animal.shelter.animals)[number]) => (
               <Link className="related-card" href={`/animal/${related.id}`} key={related.id}>
                 <Image alt={`${related.breed} 사진`} src={related.imageUrl} width={220} height={150} unoptimized />
                 <div>

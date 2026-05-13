@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { SiteNav } from "@/components/site-nav";
 import { breedsForCategory } from "@/data/breeds-by-category";
 import { formatKoreanDate, monthsAgo, toDateInputValue } from "@/lib/date";
 import { SOURCE_AWTIS, SOURCE_PAWINHAND, sourceSiteLabel } from "@/lib/source-constants";
@@ -230,7 +231,12 @@ function AlertConditionFields({
   );
 }
 
-export function SearchExperience() {
+export type SearchExperienceProps = {
+  /** 상단 공통 메뉴(보호 동물 영역에서만 사용) */
+  siteNavCurrent?: "protect";
+};
+
+export function SearchExperience({ siteNavCurrent }: SearchExperienceProps = {}) {
   const defaultSearch = useMemo(
     () => ({
       useDefaultPeriod: true,
@@ -630,6 +636,7 @@ export function SearchExperience() {
 
   return (
     <main>
+      {siteNavCurrent ? <SiteNav current={siteNavCurrent} /> : null}
       <section className="hero">
         <p className="eyebrow">통합 보호 동물 탐색</p>
         <h1>잃어버린 반려동물과 닮은 공고를 한 번에 찾아보세요.</h1>

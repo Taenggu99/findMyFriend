@@ -11,7 +11,8 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "crawler:pawinhand": "tsx src/crawler/pawinhand.ts"
+    "crawler:pawinhand": "tsx src/crawler/pawinhand.ts",
+    "naver-cafe:login": "tsx scripts/naver-cafe-login.ts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",

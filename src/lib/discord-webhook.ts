@@ -1,10 +1,12 @@
 type DiscordEmbed = {
   title?: string;
   description?: string;
+  url?: string;
   color?: number;
   fields?: { name: string; value: string; inline?: boolean }[];
   thumbnail?: { url: string };
   image?: { url: string };
+  footer?: { text: string };
 };
 
 export type DiscordWebhookBody = {
@@ -152,5 +154,44 @@ export function buildMatchAlertDiscordEmbeds(options: {
 
   return {
     embeds: [header, ...animalEmbeds]
+  };
+}
+
+export function buildCafePostDiscordBody(
+  post: {
+    title: string;
+    url: string;
+    boardLabel: string;
+    postKind: string;
+    titleRegion: string | null;
+    tradeStatus: string | null;
+    contentSnippet: string | null;
+  },
+  alertLabel?: string | null
+): DiscordWebhookBody {
+  const kindLine =
+    post.postKind === "sharing"
+      ? "**유형** 나눔·책임분양 게시판 톤"
+      : "**유형** 장터·분양 게시판 톤";
+
+  const bits = [
+    `**게시판** ${post.boardLabel}`,
+    kindLine,
+    post.titleRegion ? `**지역(제목)** ${post.titleRegion}` : null,
+    post.tradeStatus ? `**상태·표기(제목)** ${post.tradeStatus}` : null,
+    post.contentSnippet ? `\n**본문 일부**\n${truncate(post.contentSnippet, 480)}` : null
+  ].filter(Boolean);
+
+  return {
+    username: "findMyFriend · 카페",
+    embeds: [
+      {
+        title: truncate(post.title, 240),
+        url: post.url,
+        description: bits.join("\n"),
+        color: 0xc17a3a,
+        footer: alertLabel ? { text: truncate(`알림 조건: ${alertLabel}`, 200) } : undefined
+      }
+    ]
   };
 }
