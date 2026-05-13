@@ -68,6 +68,8 @@ jobs:
 
       - name: Prisma generate
         if: steps.resolve.outputs.use_curl == '0'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: npx prisma generate
 
       - name: Sync DB schema (SQLite 등 빈 DB에 테이블 생성)
