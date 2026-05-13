@@ -138,6 +138,8 @@ prisma/
 워크플로: [`.github/workflows/naver-cafe-crawl.yml`](.github/workflows/naver-cafe-crawl.yml)  
 UTC 기준 **6시간마다** 실행되며, **Actions 탭에서 수동 실행(`workflow_dispatch`)** 도 가능합니다.
 
+**참고:** GitHub은 `if:` 안에서 `secrets`를 참조할 수 없어, 워크플로는 첫 단계에서 URL 시크릿을 env로 읽은 뒤 **출력 변수로만** curl / 러너를 나눕니다.
+
 ### 추천: 지금은 **B (러너에서 크롤)**
 
 베르셀에 Playwright·SQLite·세션까지 맞추기 전에도 동작하기 쉽습니다.

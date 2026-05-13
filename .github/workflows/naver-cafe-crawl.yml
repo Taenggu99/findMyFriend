@@ -3,6 +3,7 @@
 # 기본 추천: CAFE_CRAWL_POST_URL 시크릿을 만들지 않으면 → B) 러너에서 npm run cafe:crawl
 # 나중에 배포 URL이 안정되면: CAFE_CRAWL_POST_URL 설정 → A) curl만
 #
+# GitHub은 if: 안에서 secrets를 쓸 수 없어, 첫 단계에서 env로 받아 출력 변수로만 분기합니다.
 # 시크릿·변수는 README「GitHub Actions — 네이버 카페 크롤」참고
 
 name: Naver cafe crawl
@@ -22,8 +23,19 @@ jobs:
     timeout-minutes: 25
 
     steps:
+      - id: resolve
+        name: Resolve crawl mode (secrets are not allowed in if)
+        env:
+          CAFE_CRAWL_POST_URL: ${{ secrets.CAFE_CRAWL_POST_URL }}
+        run: |
+          if [ -n "${CAFE_CRAWL_POST_URL:-}" ]; then
+            echo "use_curl=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "use_curl=0" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Trigger remote crawl API
-        if: ${{ secrets.CAFE_CRAWL_POST_URL != '' }}
+        if: steps.resolve.outputs.use_curl == '1'
         env:
           URL: ${{ secrets.CAFE_CRAWL_POST_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -42,24 +54,24 @@ jobs:
           echo "Remote crawl POST ok"
 
       - uses: actions/checkout@v4
-        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        if: steps.resolve.outputs.use_curl == '0'
 
       - uses: actions/setup-node@v4
-        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        if: steps.resolve.outputs.use_curl == '0'
         with:
           node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
-        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        if: steps.resolve.outputs.use_curl == '0'
         run: npm ci
 
       - name: Prisma generate
-        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        if: steps.resolve.outputs.use_curl == '0'
         run: npx prisma generate
 
       - name: Sync DB schema (SQLite 등 빈 DB에 테이블 생성)
-        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        if: steps.resolve.outputs.use_curl == '0'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
@@ -71,11 +83,11 @@ jobs:
           npx prisma db push --skip-generate
 
       - name: Install Playwright Chromium
-        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        if: steps.resolve.outputs.use_curl == '0'
         run: PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps chromium
 
       - name: Write naver session from secret
-        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        if: steps.resolve.outputs.use_curl == '0'
         env:
           NAVER_CAFE_SESSION_JSON: ${{ secrets.NAVER_CAFE_SESSION_JSON }}
         run: |
@@ -88,7 +100,7 @@ jobs:
           node -e "require('fs').writeFileSync('storage/naver-session.json', process.env.NAVER_CAFE_SESSION_JSON)"
 
       - name: Run cafe crawl CLI
-        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        if: steps.resolve.outputs.use_curl == '0'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
