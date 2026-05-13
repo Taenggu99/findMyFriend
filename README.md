@@ -155,6 +155,8 @@ UTC 기준 **6시간마다** 실행되며, **Actions 탭에서 수동 실행(`wo
 
 4. (선택) **Variables** 탭에 `NAVER_CAFE_CRAWL_MAX_LIST`, `NAVER_CAFE_CRAWL_MAX_DETAILS` 숫자 문자열.
 
+워크플로는 `npm ci` 뒤 **`prisma generate`** 와 **`prisma db push`** 를 실행해, 빈 SQLite에도 테이블이 생기게 합니다. (`DATABASE_URL` 시크릿이 그 단계에서도 필요합니다.)
+
 로컬에서만 시험: `npm run naver-cafe:login` 후 `npm run cafe:crawl` (`.env`의 `DATABASE_URL` 사용).
 
 ### 나중에: **A (배포 URL만 curl)**

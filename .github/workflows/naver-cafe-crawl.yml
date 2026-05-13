@@ -54,6 +54,22 @@ jobs:
         if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
         run: npm ci
 
+      - name: Prisma generate
+        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        run: npx prisma generate
+
+      - name: Sync DB schema (SQLite 등 빈 DB에 테이블 생성)
+        if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -e
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "DATABASE_URL secret is required before db push."
+            exit 1
+          fi
+          npx prisma db push --skip-generate
+
       - name: Install Playwright Chromium
         if: ${{ secrets.CAFE_CRAWL_POST_URL == '' }}
         run: PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps chromium
