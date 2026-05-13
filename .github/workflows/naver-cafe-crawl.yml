@@ -82,7 +82,7 @@ jobs:
             echo "DATABASE_URL secret is required before db push."
             exit 1
           fi
-          npx prisma db push --skip-generate
+          npx prisma db push
 
       - name: Install Playwright Chromium
         if: steps.resolve.outputs.use_curl == '0'
