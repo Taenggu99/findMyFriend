@@ -6,9 +6,191 @@ export type CafeListingStructuredSummary = {
   extraPreview: string | null;
 };
 
+/** 카페 본문에 삽입된 네이버 동영상 플레이어(P.ZP) innerText/CSS 잔재 제거 */
+function stripNaverVideoPlayerPzpNoise(text: string): string {
+  let t = text;
+
+  for (let i = 0; i < 48; i++) {
+    const next = t.replace(/\.pzp[\s\S]{0,400}?\{[^}]{0,12000}?\}/gi, " ");
+    if (next === t) break;
+    t = next;
+  }
+
+  for (let j = 0; j < 32; j++) {
+    const next = t.replace(/\.pzp(?:\.[a-z0-9_.-]+)+/gi, " ");
+    if (next === t) break;
+    t = next;
+  }
+  t = t.replace(/\bpzp-[a-z0-9_-]{4,160}(?![a-z0-9_-])/gi, " ");
+  t = t.replace(/\bbrand-playback-button\b/gi, " ");
+  t = t.replace(/background-image:\s*url\s*\([^)]*\)[^;\n]*/gi, " ");
+  t = t.replace(/contain;[^;\n]*background-position:[^;\n]*/gi, " ");
+
+  const phrases = [
+    "광고 후 계속됩니다",
+    "재생 (space/k)",
+    "음소거 (m)",
+    "전체 화면 (f)",
+    "3G/LTE 등으로 재생 시데이터 사용료가 발생할 수 있습니다.",
+    "3G/LTE 등으로 재생 시 데이터 사용료가 발생할 수 있습니다.",
+    "다음 동영상",
+    "subject author",
+    "자막 설정 글자 크기 배경색",
+    "자막 설정",
+    "재생 속도",
+    "1.0x (기본)",
+    "1.5x",
+    "2.0x",
+    "0.5x",
+    "음소거 상태입니다.",
+    "도움말",
+    "라이선스",
+    "디버그 정보 다운로드",
+    "죄송합니다. 문제가 발생했습니다. 다시 시도해 주세요.",
+    "화면을 돌리거나 터치로 움직여 보세요",
+    "사용 안함",
+    "음소거 (m) 음소거",
+    "재생 (space/k) 재생",
+    "설정 전체 화면 (f)",
+    "자막",
+    "해상도",
+    "자동 (480p)",
+    "1080p",
+    "720p",
+    "480p",
+    "270p",
+    "0:00:00"
+  ];
+  for (const p of phrases) {
+    t = t.split(p).join(" ");
+  }
+
+  t = t.replace(/\b0초\b/g, " ");
+  t = t.replace(/\b\d{2}:\d{2}\s*\/\s*\d{2}:\d{2}\b/g, " ");
+  t = t.replace(/\b\d{1,2}:\d{2}:\d{2}\b/g, " ");
+
+  return t.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** 네이버 전역 GNB·로그인 폼·동영상 플레이어가 한 줄로 붙은 잡음 */
+function isNaverGlobalOrPlayerUiNoiseLine(s: string): boolean {
+  const t = s.trim();
+  if (!t) return true;
+  if (/^본문\s*바로가기$/i.test(t)) return true;
+  if (/^뒤로가기$/i.test(t)) return true;
+  if (/^한국어$/i.test(t)) return true;
+  if (/^네이버$/i.test(t)) return true;
+  if (/^아이디\s*또는\s*전화번호$/i.test(t)) return true;
+  if (/^비밀번호$/i.test(t)) return true;
+  if (/^로그인$/i.test(t)) return true;
+  if (/^로그인\s*상태\s*유지$/i.test(t)) return true;
+  if (/비밀번호\s*찾기\s*아이디\s*찾기\s*회원가입/i.test(t)) return true;
+  if (/^비밀번호\s*찾기$/i.test(t)) return true;
+  if (/^아이디\s*찾기$/i.test(t)) return true;
+  if (/^회원가입$/i.test(t)) return true;
+  if (/^스마트봇\s*상담$/i.test(t)) return true;
+  if (/^고객센터$/i.test(t)) return true;
+  if (/투표는\s*표시되지\s*않습니다/i.test(t)) return true;
+  if (/^좋아요\s*좋아요\d*$/i.test(t)) return true;
+  if (/^0초$/i.test(t)) return true;
+  if (/^100%$/i.test(t)) return true;
+  if (/^\.\s*재생$/i.test(t)) return true;
+  if (/^재생$/i.test(t)) return true;
+  if (/^음소거$/i.test(t)) return true;
+  if (/^재생\s*음소거$/i.test(t)) return true;
+  if (/^음소거\s*재생$/i.test(t)) return true;
+  if (/^실시간$/i.test(t)) return true;
+  if (/^설정$/i.test(t)) return true;
+  if (/^취소$/i.test(t)) return true;
+  if (/^확인$/i.test(t)) return true;
+  if (/^HD$/i.test(t)) return true;
+  if (/^\d{2}:\d{2}$/.test(t)) return true;
+  if (/^00:00$/i.test(t)) return true;
+  if (/^\d$/i.test(t)) return true;
+  return false;
+}
+
+/** 본문 추출 실패로 로그인·헤더 innerText만 온 경우(분양 폼 흔적 없음) */
+function isLikelyNaverLoginPageInnerText(t: string): boolean {
+  const flat = t.replace(/\s+/g, " ").trim();
+  if (flat.length < 120) return false;
+  if (/-\s*지역\s*\(시\/구\/동\)/.test(t) || /지역\s*\(시\/구\/동\)\s*[:\uFF1A]/.test(t)) return false;
+  if (/분양\s*대상\s*\(풀네임\)/i.test(t)) return false;
+  return (
+    /아이디\s*또는\s*전화번호/.test(flat) &&
+    /로그인\s*상태\s*유지/.test(flat) &&
+    /비밀번호\s*찾기/.test(flat)
+  );
+}
+
+/**
+ * 목록·본문 전체 복사 시 섞이는 네이버 카페 앱 UI(페이지 버튼, 쇼핑 배너, 가입 유도 등)를 제거한다.
+ * 본문 앞쪽(실제 글)은 유지하고, 뒤에 붙은 UI 꼬리는 잘라 낸다.
+ */
+export function stripNaverCafeUiPasteNoise(text: string): string {
+  if (!text?.trim()) return "";
+  let t = text.replace(/\r\n/g, "\n").replace(/\u00a0/g, " ");
+  t = stripNaverVideoPlayerPzpNoise(t);
+  t = t.replace(
+    /^\s*(?:\S+\s+){1,8}가족\s*채팅\s+작성일\s+\d{4}\.\d{1,2}\.\d{1,2}\.\s+\d{1,2}:\d{2}\s+조회\s+\d+(?:\s+구독)?\s*$/gim,
+    ""
+  );
+
+  const tailMarkers = [
+    /\d{1,2}\s*페이지중\s*\d{1,2}\s*페이지/i,
+    /게시글\s*내\s*이미지\s*갯수/i,
+    /게시글\s*내용\s*갯수/i,
+    /게시글\s*내\s*이미지/i,
+    /버튼\s*선택됨/i,
+    /구피사랑\s*카페에\s*가입해/i,
+    /최근\s*일주일\s*동안\s*\d+\s*명이\s*가입/i,
+    /미사용\s*새\s*상품/i,
+    /안전거래\s*및\s*구매자\s*보호/i,
+    /목록으로\s*좋아요/i,
+    /좋아요한\s*사람\s*목록으로/i,
+    /카페에\s*가입해\s*보세요/i
+  ];
+  for (const re of tailMarkers) {
+    const idx = t.search(re);
+    if (idx >= 28) {
+      t = t.slice(0, idx).trimEnd();
+    }
+  }
+
+  const kept = t.split("\n").filter((line) => {
+    const s = line.trim();
+    if (!s) return false;
+    if (isNaverGlobalOrPlayerUiNoiseLine(s)) return false;
+    if (/^카페홈$/i.test(s)) return false;
+    if (/^구피사랑$/i.test(s)) return false;
+    if (/^검색$/i.test(s)) return false;
+    if (/^메뉴$/i.test(s)) return false;
+    if (/^\d{1,2}\s*\/\s*\d{1,3}$/.test(s)) return false;
+    if (/미사용\s*새\s*상품/.test(s)) return false;
+    if (/안전거래\s*및\s*구매자\s*보호/.test(s)) return false;
+    if (/\d+\s*페이지중/.test(s)) return false;
+    if (/^\s*좋아요\s*좋아요\s*\d/i.test(s)) return false;
+    if (/게시글\s*내\s*이미지\s*갯수/i.test(s)) return false;
+    if (/\.pzp|pzp-mobile|pzp-poster|pzp-ui-icon|pzp-seeking|brand-playback-button/i.test(s)) return false;
+    if (/광고\s*후\s*계속됩니다/i.test(s)) return false;
+    if (/재생\s*\(space\/k\)/i.test(s)) return false;
+    if (/^subject\s+author$/i.test(s)) return false;
+    if (/^다음\s*동영상$/i.test(s)) return false;
+    if (/^디버그\s*정보\s*다운로드$/i.test(s)) return false;
+    if (/가족\s*채팅\s+작성일\s+\d{4}\.\d{1,2}\.\d{1,2}\.\s+\d{1,2}:\d{2}\s+조회\s+\d+/i.test(s)) {
+      return false;
+    }
+    return true;
+  });
+  t = kept.join("\n").trim();
+  return t.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** 스니펫이 한 줄로만 올 때도 경찰·사기 안내·★공지 등을 걷어 낸다 */
 export function stripCafeSnippetNoise(blob: string): string {
-  let t = blob.replace(/\r\n/g, "\n").replace(/\u00a0/g, " ");
+  let t = stripNaverCafeUiPasteNoise(blob);
+  if (isLikelyNaverLoginPageInnerText(t)) t = "";
+  t = t.replace(/\r\n/g, "\n").replace(/\u00a0/g, " ");
 
   t = t.replace(/https?:\/\/[^\s\u200b]+/gi, " ");
 
@@ -147,6 +329,13 @@ export function normalizeCafeArticleWhitespace(s: string): string {
 /** 닉네임·연락처 등 폼 잡항목 줄 제거(본문 줄 단위) */
 export function shouldDropCafeNoiseLine(trimmed: string): boolean {
   if (!trimmed) return true;
+  if (isNaverGlobalOrPlayerUiNoiseLine(trimmed)) return true;
+  if (/가족\s*채팅\s+작성일\s+\d{4}\.\d{1,2}\.\d{1,2}\.\s+\d{1,2}:\d{2}\s+조회\s+\d+/i.test(trimmed)) {
+    return true;
+  }
+  if (/\.pzp|pzp-mobile|pzp-poster|pzp-ui-icon|pzp-seeking|brand-playback-button/i.test(trimmed)) return true;
+  if (/광고\s*후\s*계속됩니다/i.test(trimmed)) return true;
+  if (/재생\s*\(space\/k\)/i.test(trimmed)) return true;
   if (/^[-_＿–—]\s*닉네임\b/i.test(trimmed)) return true;
   if (/^[-_＿–—]\s*나이\b/i.test(trimmed)) return true;
   if (/^[-_＿–—]\s*연락처\b/i.test(trimmed)) return true;

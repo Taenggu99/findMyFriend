@@ -9,10 +9,10 @@ export const NAVER_CAFE_SELECTORS = {
     'a[href*="articleId="]'
   ],
   articleBody: [
+    "#articleBodyContents",
     ".se-main-container",
     ".ArticleViewContent .se-main-container",
     ".article_view .se-main-container",
-    "#articleBodyContents",
     ".article_view_area",
     ".ArticleViewContent",
     ".ArticleContentBox",

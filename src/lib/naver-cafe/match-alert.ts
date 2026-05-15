@@ -1,6 +1,7 @@
 import type { CafeCrawledPost, CafeUserAlert } from "@prisma/client";
 
 import { isLoveShareCompletedTitle } from "@/lib/naver-cafe/boards";
+import { cafeHaystackMatchesRegionMetros } from "@/lib/naver-cafe/cafe-region-filter";
 
 function parseJsonArray(raw: string): string[] {
   try {
@@ -12,17 +13,14 @@ function parseJsonArray(raw: string): string[] {
   }
 }
 
-function normalizeRegion(s: string): string {
-  return s.replace(/\s+/g, "");
-}
-
-/** 사용자가 고른 지역이 제목의 [지역]과 맞는지 (부분 일치 허용) */
-export function regionMatches(selected: string, titleRegion: string | null): boolean {
-  if (!selected.trim()) return true;
-  if (!titleRegion) return false;
-  const a = normalizeRegion(selected);
-  const b = normalizeRegion(titleRegion);
-  return b.includes(a) || a.includes(b);
+/** 본문·스니펫에서 `지역(시/구/동) : …` 한 줄 값만 뽑는다(카드 요약과 동일 패턴). */
+export function extractCafeFormRegionSiGuDong(text: string | null | undefined): string | null {
+  if (!text?.trim()) return null;
+  const m = text.match(
+    /(?:^|\n)\s*[-_＿–—]?\s*지역\s*\(시\/구\/동\)\s*[:\uFF1A]\s*([^\n]+)/im
+  );
+  const v = m?.[1]?.trim();
+  return v ? v : null;
 }
 
 /** 한 줄(문구) 안에서는 띄어쓰기로 나눈 토큰이 모두 포함되어야 함(AND). 줄 여러 개는 OR. */
@@ -66,8 +64,13 @@ export function cafeAlertMatchesPost(
 
   const regions = parseJsonArray(alert.regionsJson);
   if (regions.length > 0) {
-    const ok = regions.some((r) => regionMatches(r, post.titleRegion));
-    if (!ok) return false;
+    const formRegion =
+      extractCafeFormRegionSiGuDong(post.contentSnippet) ?? extractCafeFormRegionSiGuDong(post.title);
+    const regionHaystackTight = [post.titleRegion, formRegion].filter(Boolean).join("\n");
+    const regionHaystackWide = [post.title, post.contentSnippet ?? "", regionHaystackTight].filter(Boolean).join("\n");
+    if (!cafeHaystackMatchesRegionMetros(regionHaystackTight, regionHaystackWide, regions)) {
+      return false;
+    }
   }
 
   const phrases = parseJsonArray(alert.keywordPhrasesJson);

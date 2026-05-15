@@ -16,5 +16,6 @@ export const CAFE_REGION_OPTIONS = [
   "전남",
   "경북",
   "경남",
-  "제주"
+  "제주",
+  "기타"
 ] as const;

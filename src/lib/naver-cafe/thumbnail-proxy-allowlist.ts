@@ -6,6 +6,7 @@ export function isAllowedCafeThumbnailFetchHost(hostname: string): boolean {
     h.endsWith(".pstatic.net") ||
     h.endsWith(".naver.net") ||
     h.endsWith(".naver.com") ||
+    h.endsWith("navercdn.net") ||
     h.endsWith(".daumcdn.net") ||
     h.endsWith(".daum.net") ||
     h.endsWith(".kakaocdn.net")

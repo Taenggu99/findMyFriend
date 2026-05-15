@@ -69,6 +69,105 @@ export function sanitizeCafeListLinkTitle(raw: string): string {
   return t.trim() || "제목 없음";
 }
 
+function tabTitleLooksLikeShoppingOrUi(s: string): boolean {
+  return /미사용\s*새\s*상품|안전거래\s*및\s*구매자(?:\s*보호)?|페이지중\s*\d+\s*페이지|\d+\s*페이지중/i.test(
+    s
+  );
+}
+
+function pickArticleTitleForPersist(domTitle: string | null, listTitleRaw: string, tabTitleRaw: string): string {
+  const listTrim = listTitleRaw.replace(/\s+/g, " ").trim();
+  const tabRaw = tabTitleRaw.replace(/\s*:\s*네이버\s*카페.*$/i, "").replace(/\s+/g, " ").trim();
+  const domTrim = domTitle?.replace(/\s+/g, " ").trim() ?? "";
+
+  if (tabTitleLooksLikeShoppingOrUi(tabRaw) && listTrim.length >= 2) {
+    return listTrim;
+  }
+  if (domTrim.length >= 2 && domTrim.length <= 240 && !tabTitleLooksLikeShoppingOrUi(domTrim)) {
+    return domTrim;
+  }
+  if (listTrim.length >= 2) return listTrim;
+  if (tabRaw.length >= 2) return tabRaw;
+  return domTrim || listTrim || tabRaw || "제목 없음";
+}
+
+async function extractArticleSubjectTitle(page: import("playwright").Page): Promise<string | null> {
+  try {
+    const og = await page
+      .locator('meta[property="og:title"]')
+      .getAttribute("content", { timeout: 2500 })
+      .catch(() => null);
+    if (og?.trim()) {
+      const o = og
+        .replace(/\s*:\s*네이버\s*카페.*$/i, "")
+        .replace(/\s*-\s*구피사랑.*$/i, "")
+        .replace(/\s*:\s*구피사랑.*$/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (o.length >= 2 && o.length <= 240 && !tabTitleLooksLikeShoppingOrUi(o)) return o;
+    }
+  } catch {
+    /* */
+  }
+
+  const selectors = [...NAVER_CAFE_SELECTORS.articleBody];
+  for (const frame of page.frames()) {
+    try {
+      const t = await frame.evaluate<string | null, string[]>((sels) => {
+        const collectDocs = (): Document[] => {
+          const out: Document[] = [document];
+          document.querySelectorAll("iframe").forEach((fr) => {
+            try {
+              const id = fr.contentDocument;
+              if (id && !out.includes(id)) out.push(id);
+            } catch {
+              /* */
+            }
+          });
+          return out;
+        };
+
+        const titleSels = [
+          ".article_title .title_text",
+          ".article_title .ellipsis",
+          ".title_text",
+          ".ArticleTitle .title_text",
+          ".ArticleTitle a",
+          ".ArticleTitle",
+          "article .ArticleTitle",
+          ".article_info h3",
+          "h2.title",
+          "h3.title"
+        ];
+
+        for (const doc of collectDocs()) {
+          for (const ts of titleSels) {
+            const el = doc.querySelector(ts);
+            const raw = (el?.textContent ?? "").replace(/\s+/g, " ").trim();
+            if (raw.length >= 2 && raw.length <= 240) return raw;
+          }
+          for (const sel of sels) {
+            const root = doc.querySelector(sel);
+            if (!root) continue;
+            const inner = root.querySelector(
+              ".article_title, [class*='article_title'], .ArticleTitle, [class*='ArticleTitle']"
+            );
+            if (inner) {
+              const raw = (inner.textContent ?? "").replace(/\s+/g, " ").trim();
+              if (raw.length >= 2 && raw.length <= 240) return raw;
+            }
+          }
+        }
+        return null;
+      }, selectors);
+      if (t?.trim()) return t.trim();
+    } catch {
+      /* cross-origin / detached */
+    }
+  }
+  return null;
+}
+
 function absolutize(href: string, base: string): string | null {
   try {
     const u = new URL(href, base);
@@ -94,8 +193,7 @@ async function waitForArticleContentReady(page: import("playwright").Page): Prom
             const n = (el?.innerText ?? el?.textContent ?? "").trim().length;
             if (n > max) max = n;
           }
-          const b = (d.body?.innerText ?? "").trim().length;
-          return Math.max(max, b);
+          return max;
         };
         const okDoc = (d: Document): boolean => scoreDoc(d) > 40;
         if (okDoc(document)) return true;
@@ -203,6 +301,15 @@ async function extractArticleSnippet(page: import("playwright").Page): Promise<s
         return out;
       };
 
+      const looksLikeNaverLoginChrome = (blob: string): boolean => {
+        const head = blob.slice(0, 4000);
+        return (
+          /아이디\s*또는\s*전화번호/.test(head) &&
+          /로그인\s*상태\s*유지/.test(head) &&
+          /비밀번호\s*찾기/.test(head)
+        );
+      };
+
       let best = "";
       for (const doc of collectDocs()) {
         for (const sel of sels) {
@@ -211,8 +318,16 @@ async function extractArticleSnippet(page: import("playwright").Page): Promise<s
           const t = (el.innerText ?? el.textContent ?? "").replace(/\r\n/g, "\n").trim();
           if (t.length > best.length) best = t;
         }
-        const body = (doc.body?.innerText ?? "").replace(/\r\n/g, "\n").trim();
-        if (body.length > best.length) best = body;
+        if (doc !== document) {
+          const body = (doc.body?.innerText ?? "").replace(/\r\n/g, "\n").trim();
+          if (
+            body.length > best.length &&
+            body.length < 90_000 &&
+            !looksLikeNaverLoginChrome(body)
+          ) {
+            best = body;
+          }
+        }
       }
       return best.length > 12 ? best.slice(0, 8000) : null;
     }, selectors);
@@ -230,7 +345,7 @@ async function extractArticleSnippet(page: import("playwright").Page): Promise<s
   return normalizeCafeArticleWhitespace(best);
 }
 
-/** 본문에서 첫 본문용 이미지(또는 그 묶음) 뒤에 오는 글만 — 금액·설명이 보통 여기 */
+/** 본문에서 첫 본문용 이미지·동영상(또는 그 묶음) 뒤에 오는 글 — 사진/영상 아래에 적는 설명·폼 */
 async function extractArticleTextAfterFirstImage(page: import("playwright").Page): Promise<string | null> {
   const selectors = [...NAVER_CAFE_SELECTORS.articleBody];
 
@@ -260,6 +375,73 @@ async function extractArticleTextAfterFirstImage(page: import("playwright").Page
         );
       };
 
+      const isContentVideo = (video: HTMLVideoElement) => {
+        if (/emoji|icon|favicon|btn_/i.test(video.className)) return false;
+        const src = (video.currentSrc || video.getAttribute("src") || "").trim();
+        const poster = (video.getAttribute("poster") || "").trim();
+        if (poster && /^https?:\/\//i.test(poster) && !/1x1|pixel|spacer|blank/i.test(poster)) {
+          return true;
+        }
+        if (src && /^https?:\/\//i.test(src) && !/1x1|pixel|spacer|blank/i.test(src)) {
+          return true;
+        }
+        return !!video.closest(".se-module-video, .se-module-oglink-video, figure.se-video, .se-video");
+      };
+
+      /** img / video / 비디오 모듈 래퍼 중 문서 순서상 가장 앞선 본문 미디어 */
+      const pickFirstBodyMedia = (root: Element): Element | null => {
+        const scored: Element[] = [];
+        for (const img of root.querySelectorAll("img")) {
+          if (img instanceof HTMLImageElement && isContentImg(img)) scored.push(img);
+        }
+        for (const vid of root.querySelectorAll("video")) {
+          if (vid instanceof HTMLVideoElement && isContentVideo(vid)) scored.push(vid);
+        }
+        if (scored.length) {
+          scored.sort((a, b) => {
+            const rp = a.compareDocumentPosition(b);
+            if (rp & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+            if (rp & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+            return 0;
+          });
+          return scored[0] ?? null;
+        }
+        const mod = root.querySelector(
+          ".se-module-video, .se-module-oglink-video, [data-module='video'], [data-module='Video']"
+        );
+        return mod && root.contains(mod) ? mod : null;
+      };
+
+      const resolveMediaAnchor = (first: Element): Element | null => {
+        if (first instanceof HTMLImageElement) {
+          return (
+            first.closest("figure.se-image") ||
+            first.closest("figure.se-module-image") ||
+            first.closest("figure") ||
+            first.closest(".se-module-image") ||
+            first.closest(".se-image-resource") ||
+            first.closest(".se-component") ||
+            first.closest("p") ||
+            first.parentElement
+          );
+        }
+        if (first instanceof HTMLVideoElement) {
+          return (
+            first.closest("figure.se-video") ||
+            first.closest(".se-module-video") ||
+            first.closest(".se-video") ||
+            first.closest("figure") ||
+            first.closest(".se-component") ||
+            first.parentElement
+          );
+        }
+        return (
+          first.closest(".se-module-video") ||
+          first.closest(".se-component") ||
+          first.parentElement
+        );
+      };
+
       let best: string | null = null;
       const consider = (txt: string | null) => {
         const n = txt?.trim() ?? "";
@@ -271,20 +453,10 @@ async function extractArticleTextAfterFirstImage(page: import("playwright").Page
           const root = doc.querySelector(sel);
           if (!root) continue;
 
-          const imgs = [...root.querySelectorAll("img")].filter(isContentImg);
-          if (imgs.length === 0) continue;
+          const firstMedia = pickFirstBodyMedia(root);
+          if (!firstMedia) continue;
 
-          const first = imgs[0];
-          const anchor =
-            first.closest("figure.se-image") ||
-            first.closest("figure.se-module-image") ||
-            first.closest("figure") ||
-            first.closest(".se-module-image") ||
-            first.closest(".se-image-resource") ||
-            first.closest(".se-component") ||
-            first.closest("p") ||
-            first.parentElement;
-
+          const anchor = resolveMediaAnchor(firstMedia);
           if (!anchor || !root.contains(anchor)) continue;
 
           try {
@@ -351,32 +523,111 @@ async function extractArticleThumbnail(page: import("playwright").Page): Promise
       };
 
       const pick = (raw: string | null | undefined): string | null => {
-        const s = raw?.trim();
-        if (!s || !/^https?:\/\//i.test(s)) return null;
+        let s = raw?.trim() ?? "";
+        if (!s) return null;
+        if (s.startsWith("//")) s = `https:${s}`;
+        if (!/^https?:\/\//i.test(s)) return null;
         return s;
       };
+
+      const isPlaceholderUrl = (u: string): boolean =>
+        /^data:/i.test(u) ||
+        /blank|placeholder|spacer|1x1|pixel|empty\.(gif|png)|transparent/i.test(u) ||
+        (u.length < 36 && /\/[a-z0-9_-]{1,8}\.(gif|png)(\?|$)/i.test(u));
 
       const isVideoUrl = (u: string): boolean =>
         /\.(mp4|webm|m3u8)(\?|$)/i.test(u) ||
         /\/video\/|vod\.naver|serviceapi\.nmv|\.naver\.com\/.*\.mp4|naver\.net\/.*\.mp4/i.test(u);
 
       const isBadImg = (u: string): boolean =>
-        /emoji|icon|spacer|blank|favicon|btn_|emotion|sticker|profile/i.test(u);
+        /emoji|icon|spacer|favicon|btn_|emotion|sticker|profile|\/blank\.|_blank\./i.test(u);
+
+      const firstFromSrcset = (srcset: string | null): string | null => {
+        if (!srcset?.trim()) return null;
+        const parts = srcset
+          .split(",")
+          .map((p) => p.trim().split(/\s+/)[0])
+          .filter(Boolean);
+        for (const p of parts) {
+          const u = pick(p);
+          if (u && !isPlaceholderUrl(u)) return u;
+        }
+        return null;
+      };
+
+      const IMG_URL_ATTRS = [
+        "data-src",
+        "data-lazy-src",
+        "data-original",
+        "data-cafe-attach-src",
+        "data-cafe-attach-url",
+        "data-attach-src",
+        "data-img-src",
+        "data-url",
+        "data-image",
+        "data-thumb-src",
+        "data-deferred-src",
+        "data-lazy",
+        "src"
+      ];
+
+      const collectUrlsFromImg = (img: HTMLImageElement): string[] => {
+        const seen = new Set<string>();
+        const push = (u: string | null) => {
+          const x = u?.trim();
+          if (x && !seen.has(x)) seen.add(x);
+        };
+        for (const name of IMG_URL_ATTRS) {
+          push(pick(img.getAttribute(name)));
+        }
+        push(firstFromSrcset(img.getAttribute("srcset")));
+        return [...seen];
+      };
+
+      const bgUrlFromStyle = (style: string | null | undefined): string | null => {
+        if (!style?.includes("url(")) return null;
+        const m = style.match(/url\(\s*["']?([^"')]+)["']?\s*\)/i);
+        return m?.[1] ? pick(m[1]) : null;
+      };
+
+      const pickBgThumb = (el: Element | null): string | null => {
+        if (!el || !(el instanceof HTMLElement)) return null;
+        const u =
+          bgUrlFromStyle(el.getAttribute("style")) ||
+          bgUrlFromStyle(el.style?.cssText) ||
+          null;
+        if (!u || isBadImg(u) || isVideoUrl(u) || isPlaceholderUrl(u)) return null;
+        return u;
+      };
 
       const pickImg = (el: Element | null | undefined): string | null => {
         if (!el || !(el instanceof HTMLImageElement)) return null;
-        const src =
-          pick(el.getAttribute("src")) ||
-          pick(el.getAttribute("data-src")) ||
-          pick(el.getAttribute("data-lazy-src")) ||
-          pick(el.getAttribute("data-original"));
-        if (!src || isBadImg(src) || isVideoUrl(src)) return null;
-        return src;
+        for (const u of collectUrlsFromImg(el)) {
+          if (!isBadImg(u) && !isVideoUrl(u) && !isPlaceholderUrl(u)) return u;
+        }
+        const pic = el.closest("picture");
+        if (pic) {
+          for (const s of pic.querySelectorAll("source")) {
+            const u = firstFromSrcset(s.getAttribute("srcset"));
+            if (u && !isBadImg(u) && !isVideoUrl(u) && !isPlaceholderUrl(u)) return u;
+          }
+        }
+        return null;
+      };
+
+      const scanBackgroundImages = (root: Element): string | null => {
+        for (const el of root.querySelectorAll(
+          ".se-image-resource, .se-module-image, [class*='se-image'], [style*='background-image'], [style*='url(']"
+        )) {
+          const u = pickBgThumb(el);
+          if (u) return u;
+        }
+        return null;
       };
 
       const thumbNearVideo = (vid: HTMLVideoElement): string | null => {
         const poster = pick(vid.getAttribute("poster"));
-        if (poster && !isVideoUrl(poster)) return poster;
+        if (poster && !isVideoUrl(poster) && !isPlaceholderUrl(poster)) return poster;
 
         const wrap = vid.closest(
           ".se-component, .se-module-video, .se-module-oglink, figure, .iframe_wrap, .ContentRenderer, .se-main-container, .se-section, article"
@@ -408,9 +659,15 @@ async function extractArticleThumbnail(page: import("playwright").Page): Promise
           for (const mod of root.querySelectorAll(
             ".se-module-video, .se-video, [class*='se-module-video'], [class*='Video'], .vod_player, .video_wrap"
           )) {
-            const s = pickImg(mod.querySelector("img"));
-            if (s) return s;
+            for (const img of mod.querySelectorAll("img")) {
+              const s = pickImg(img);
+              if (s) return s;
+            }
+            const bg = pickBgThumb(mod);
+            if (bg) return bg;
           }
+          const bg = scanBackgroundImages(root);
+          if (bg) return bg;
         }
       }
 
@@ -436,6 +693,8 @@ async function extractArticleThumbnail(page: import("playwright").Page): Promise
         for (const sel of sels) {
           const root = doc.querySelector(sel);
           if (!root) continue;
+          const bg = scanBackgroundImages(root);
+          if (bg) return bg;
           for (const img of root.querySelectorAll("img")) {
             const s = pickImg(img);
             if (s) return s;
@@ -444,25 +703,37 @@ async function extractArticleThumbnail(page: import("playwright").Page): Promise
       }
 
       for (const doc of collectDocs()) {
+        const bg = scanBackgroundImages(doc.body ?? doc.documentElement);
+        if (bg) return bg;
         const fallback = doc.querySelector<HTMLImageElement>(
-          "img[src*='cafe.pstatic.net'], img[src*='postfiles'], img[src*='naver.net'], img[src*='pstatic.net']"
+          "img[src*='cafe.pstatic.net'], img[src*='postfiles'], img[src*='naver.net'], img[src*='pstatic.net'], img[src*='navercdn'], img[data-src*='postfiles'], img[data-src*='pstatic'], img[data-src*='naver.net']"
         );
         const fb = pickImg(fallback);
         if (fb) return fb;
       }
 
       const any = rootDoc.querySelector<HTMLImageElement>(
-        "main img[src^='http'], article img[src^='http'], #content img[src^='http']"
+        "main img[src^='http'], main img[src^='//'], article img[src^='http'], article img[src^='//'], #content img[src^='http'], #content img[src^='//']"
       );
-      return pickImg(any);
+      const anyPick = pickImg(any);
+      if (anyPick) return anyPick;
+
+      const anyLazy = rootDoc.querySelector<HTMLImageElement>(
+        "main img[data-src^='http'], main img[data-src^='//'], article img[data-src^='http'], #articleBodyContents img[data-src], .se-main-container img[data-src]"
+      );
+      return pickImg(anyLazy);
     }, selectors);
 
-  /** 광고·타 프레임의 첫 이미지를 피하려면 메인 프레임(+그 안 동일출처 iframe)만 본다 */
-  try {
-    return await grabFromFrame(page.mainFrame());
-  } catch {
-    return null;
+  const frames = [page.mainFrame(), ...page.frames().filter((f) => f !== page.mainFrame())];
+  for (const frame of frames) {
+    try {
+      const u = await grabFromFrame(frame);
+      if (u?.trim()) return u.trim();
+    } catch {
+      /* detached / cross-origin */
+    }
   }
+  return null;
 }
 
 /** 글 본문 페이지에서 등록일 추출 (ISO 또는 null) */
@@ -752,7 +1023,8 @@ export async function runNaverCafeCrawl(
         const thumb = await extractArticleThumbnail(page);
         const postedAtIso = await extractArticlePostedAt(page);
         const titleFromPage = await page.title().catch(() => row.title);
-        const rawTitle = titleFromPage.replace(/\s*:\s*네이버\s*카페.*$/i, "").trim() || row.title;
+        const domTitle = await extractArticleSubjectTitle(page);
+        const rawTitle = pickArticleTitleForPersist(domTitle, row.title, titleFromPage);
         const cleanTitle = sanitizeCafeListLinkTitle(rawTitle);
         if (row.board.key === "love_share" && isLoveShareCompletedTitle(cleanTitle)) {
           naverCafeLog("skip completed love_share detail", cleanTitle.slice(0, 72));
